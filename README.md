@@ -233,13 +233,17 @@ Isi Home mengikuti desain MagicPath:
 - Fokus di kartu mana pun juga mengganti hero dengan item kartu itu: logo app dan baris asalnya,
   meta (episode, tahun, atau channel; lalu sisa waktu atau durasi, dan kapan terakhir ditonton),
   dan deskripsi. Nama app tidak ditulis karena sudah diwakili logonya. Siaran berhenti selama fokus di baris, jadi tidak ada suara di belakang.
-- Urutan baris: Continue watching ("Plex + apps"), Recommendations from Plex, YouTube Recommended
-  for you, Recently added, Your apps, YouTube Subscriptions, Movies in your library. Baris dari satu
+- Urutan baris: Your apps, Continue watching, Recommendations from Plex, YouTube Recommended for
+  you, Recently added, YouTube Subscriptions, Movies in your library.
+- Tampilan default cuma hero, baris Your apps, dan sedikit intipan baris berikutnya (judul dan ujung
+  atas kartunya) di tepi bawah layar sebagai tanda masih bisa di-scroll. Baris lain baru terbuka saat
+  fokus turun ke Continue watching, dan tertutup lagi saat fokus naik ke Your apps atau stage. Scrim
+  gelap di kiri dan bawah menjaga teks tetap kebaca di atas gambar yang terang. Baris dari satu
   app punya logo app itu di kiri judulnya. Continue watching, yang isinya campuran, tanpa logo. Kartu menampilkan tahun di kiri atas untuk baris Plex (kartu di Continue watching tanpa label, appnya kelihatan di hero saat kartu difokus),
   badge kanan atas (sisa waktu, "Next", atau durasi), dan progress bar oranye untuk Plex, merah untuk
   YouTube, putih untuk aplikasi lain.
-- Navigasi: atas dari baris paling atas ke stage, atas dari stage ke tab aktif, bawah dari top bar
-  ke stage, bawah dari stage ke kartu terakhir.
+- Navigasi: atas dari Your apps ke stage, atas dari stage ke tab aktif, bawah dari top bar ke stage,
+  bawah dari stage ke kartu terakhir (atau aplikasi pertama).
 
 OK di kartu membuka item lewat intent yang ditulis aplikasinya. Gambar kartu diambil lewat internet,
 di-decode selebar kartu (320 px), dan disimpan di cache memori seperdelapan heap app. Gambar yang sama

@@ -89,6 +89,8 @@ public class HomeActivity extends Activity {
     private LinearLayout rowsTop;
     private LinearLayout rowsBottom;
     private LinearLayout appRow;
+    private View appSection;
+    private boolean rowsExpanded = true;
     private ScrollView rowsScroll;
     private View homePane;
     private ScrollView appsPane;
@@ -152,11 +154,11 @@ public class HomeActivity extends Activity {
 
         View scrimSide = new View(this);
         scrimSide.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-            new int[] {Color.argb(235, 15, 16, 18), Color.argb(120, 15, 16, 18), Color.argb(10, 15, 16, 18)}));
+            new int[] {Color.argb(240, 15, 16, 18), Color.argb(170, 15, 16, 18), Color.argb(40, 15, 16, 18)}));
         root.addView(scrimSide, new FrameLayout.LayoutParams(-1, -1));
         View scrimBottom = new View(this);
         scrimBottom.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-            new int[] {Color.argb(120, 0, 0, 0), Color.argb(0, 0, 0, 0), Color.argb(200, 15, 16, 18), BG}));
+            new int[] {Color.argb(130, 0, 0, 0), Color.argb(0, 0, 0, 0), Color.argb(170, 15, 16, 18), Color.argb(240, 15, 16, 18)}));
         root.addView(scrimBottom, new FrameLayout.LayoutParams(-1, -1));
 
         LinearLayout overlay = new LinearLayout(this);
@@ -180,19 +182,26 @@ public class HomeActivity extends Activity {
         rowsScroll.setVerticalScrollBarEnabled(false);
         rowsScroll.setFocusable(false);
         rowsScroll.setPadding(0, px(8), 0, 0);
+        // Collapsed, the rows stay at the top: the scroller moves the focused app into view by itself
+        // when it resizes, which would hide the apps title.
+        rowsScroll.setOnScrollChangeListener((v, x, y, oldX, oldY) -> {
+            if (!rowsExpanded && y != 0) {
+                v.scrollTo(0, 0);
+            }
+        });
         LinearLayout rows = new LinearLayout(this);
         rows.setOrientation(LinearLayout.VERTICAL);
         rows.setClipChildren(false);
         rowsScroll.addView(rows);
-        LinearLayout.LayoutParams rowsLp = new LinearLayout.LayoutParams(-1,
-            Math.round(getResources().getDisplayMetrics().heightPixels * 0.42f));
+        LinearLayout.LayoutParams rowsLp = new LinearLayout.LayoutParams(-1, 0);
         rowsLp.topMargin = px(20);
         home.addView(rowsScroll, rowsLp);
 
+        appRow = new LinearLayout(this);
+        appSection = section(getString(R.string.row_apps), null, new HorizontalScrollView(this), appRow);
+        rows.addView(appSection);
         rowsTop = column();
         rows.addView(rowsTop);
-        appRow = new LinearLayout(this);
-        rows.addView(section(getString(R.string.row_apps), null, new HorizontalScrollView(this), appRow));
         rowsBottom = column();
         rows.addView(rowsBottom);
 
@@ -209,6 +218,10 @@ public class HomeActivity extends Activity {
         panes.addView(appsPane, new FrameLayout.LayoutParams(-1, -1));
 
         setContentView(root);
+        // Only the apps show under the hero until focus moves into the content rows below them.
+        setRowsExpanded(false);
+        root.getViewTreeObserver().addOnGlobalFocusChangeListener((oldFocus, newFocus) -> setRowsExpanded(
+            newFocus != null && (isInside(newFocus, rowsTop) || isInside(newFocus, rowsBottom))));
     }
 
     /** Back to the LIVE stage with focus on it, then refreshes the apps and every row. */
@@ -249,6 +262,34 @@ public class HomeActivity extends Activity {
         rowsScroll.scrollTo(0, 0);
         showStage(0);
         stageDots[0].requestFocus();
+    }
+
+    /**
+     * Shows the rows in full, or only the apps row under the hero (the default view, so live TV or the
+     * pick fills most of the screen) with the next row's title and the top of its cards peeking at the
+     * bottom edge, as a hint that there is more below.
+     *
+     * @param expanded true while focus is in the content rows
+     */
+    private void setRowsExpanded(boolean expanded) {
+        LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) rowsScroll.getLayoutParams();
+        int height = Math.round(getResources().getDisplayMetrics().heightPixels * 0.42f);
+        if (!expanded) {
+            appSection.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            height = rowsScroll.getPaddingTop() + appSection.getMeasuredHeight() + px(96);
+        }
+        int bottom = 0;
+        if (lp.height == height && lp.bottomMargin == bottom) {
+            return;
+        }
+        lp.height = height;
+        lp.bottomMargin = bottom;
+        rowsExpanded = expanded;
+        rowsScroll.setLayoutParams(lp);
+        if (!expanded) {
+            rowsScroll.scrollTo(0, 0);
+        }
     }
 
     // ---- Hero and stage -------------------------------------------------------------------------
@@ -597,16 +638,19 @@ public class HomeActivity extends Activity {
     }
 
     /**
-     * @return the first card of the top row, or the first app when there are no content rows
+     * @return the first app, or the first content card when there are no apps
      */
     private View firstCard() {
+        if (appRow.getChildCount() > 0) {
+            return appRow.getChildAt(0);
+        }
         for (int i = 0; i < rowsTop.getChildCount(); i++) {
             LinearLayout row = rowOf(rowsTop.getChildAt(i));
             if (row.getChildCount() > 0) {
                 return row.getChildAt(0);
             }
         }
-        return appRow.getChildCount() > 0 ? appRow.getChildAt(0) : null;
+        return null;
     }
 
     /**
@@ -699,8 +743,8 @@ public class HomeActivity extends Activity {
 
     /**
      * Rebuilds the content rows in the design's order, keeping the focused card when it is still there:
-     * Continue watching, Recommendations from Plex, YouTube's first row, Recently added, then (after the
-     * apps) YouTube's second row and Movies in your library.
+     * (after the apps) Continue watching, Recommendations from Plex, YouTube's first row, Recently
+     * added, YouTube's second row and Movies in your library.
      */
     private void showRows() {
         View focused = getCurrentFocus();
@@ -715,11 +759,11 @@ public class HomeActivity extends Activity {
         rowsBottom.removeAllViews();
         String ytPkg = getString(R.string.youtube_package);
         addRow(rowsTop, getString(R.string.row_continue), null, continueItems(), true);
-        addRow(rowsTop, getString(R.string.plex_recommendations), PLEX_PKG, plexRecs, false);
+        addRow(rowsBottom, getString(R.string.plex_recommendations), PLEX_PKG, plexRecs, false);
         if (youtubeRows.length > 0 && youtube.size() > 0) {
-            addRow(rowsTop, youtubeRows[0], ytPkg, youtube.get(0), false);
+            addRow(rowsBottom, youtubeRows[0], ytPkg, youtube.get(0), false);
         }
-        addRow(rowsTop, getString(R.string.row_recently_added), PLEX_PKG, plexRecent, false);
+        addRow(rowsBottom, getString(R.string.row_recently_added), PLEX_PKG, plexRecent, false);
         for (int i = 1; i < youtubeRows.length && i < youtube.size(); i++) {
             addRow(rowsBottom, youtubeRows[i], ytPkg, youtube.get(i), false);
         }
