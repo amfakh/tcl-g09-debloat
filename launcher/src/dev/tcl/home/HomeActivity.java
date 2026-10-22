@@ -200,9 +200,12 @@ public class HomeActivity extends Activity {
         appsPane.setVerticalScrollBarEnabled(false);
         appsPane.setFocusable(false);
         appsPane.setVisibility(View.GONE);
+        // The pane starts at the 96 px left margin; the same right padding centers the grid on screen.
+        appsPane.setPadding(0, 0, px(96), 0);
         appsGrid = column();
-        appsGrid.setPadding(px(12), px(56), 0, px(48));
-        appsPane.addView(appsGrid);
+        // Each tile carries a 28 px right margin; the same on the left keeps the grid symmetric.
+        appsGrid.setPadding(px(28), px(56), 0, px(48));
+        appsPane.addView(appsGrid, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL));
         panes.addView(appsPane, new FrameLayout.LayoutParams(-1, -1));
 
         setContentView(root);

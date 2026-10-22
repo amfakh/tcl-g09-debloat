@@ -219,7 +219,7 @@ Top bar seperti desain: tombol profil, pill Search / Home / Apps, pill ambient (
 sekarang Aerial Views) dan Settings, lalu jam "HH:mm | Home". Tombol profil memakai foto user Plex
 di `plex_home_user` (huruf `profile_initial` sebelum fotonya kebaca) dan membuka pemilih profil
 Google TV. Foto akun Google tidak bisa dibaca app pihak ketiga. Search membuka pencarian Google TV
-dalam mode suara. Apps membuka grid kartu semua aplikasi (6 kolom, urutan sama dengan baris
+dalam mode suara. Apps membuka grid kartu semua aplikasi di tengah layar (6 kolom, urutan sama dengan baris
 "Your apps").
 
 Isi Home mengikuti desain MagicPath:
