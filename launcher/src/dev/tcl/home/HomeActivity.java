@@ -75,7 +75,6 @@ public class HomeActivity extends Activity {
     private String[] youtubeRows;
 
     private ImageView heroArt;
-    private TextView ghost;
     private ImageView heroLogo;
     private TextView heroSource;
     private TextView heroTitle;
@@ -150,14 +149,6 @@ public class HomeActivity extends Activity {
         heroArt.setScaleType(ImageView.ScaleType.CENTER_CROP);
         heroArt.setVisibility(View.GONE);
         root.addView(heroArt, new FrameLayout.LayoutParams(-1, -1));
-
-        ghost = text(150, Color.argb(46, 241, 243, 244), true);
-        // Clipped, not ellipsized: an ellipsis there reads as extra stage dots.
-        ghost.setSingleLine(true);
-        ghost.setGravity(Gravity.END);
-        FrameLayout.LayoutParams ghostLp = new FrameLayout.LayoutParams(px(1000), -2, Gravity.END | Gravity.TOP);
-        ghostLp.setMargins(0, px(250), px(96), 0);
-        root.addView(ghost, ghostLp);
 
         View scrimSide = new View(this);
         scrimSide.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
@@ -399,7 +390,7 @@ public class HomeActivity extends Activity {
     }
 
     /**
-     * Shows an item in the hero: its artwork behind, a ghost title on the right, where it comes from,
+     * Shows an item in the hero: its artwork behind, where it comes from,
      * its title, meta line and description. Live TV stops while an item is shown.
      *
      * @param item the item
@@ -418,7 +409,6 @@ public class HomeActivity extends Activity {
             heroArt.setImageDrawable(null);
             images.load(uri, heroArt, 1280);
         }
-        ghost.setText(item.title);
         // The app's logo says where it comes from, so neither line repeats the app's name.
         heroLogo.setBackground(logoShape());
         heroLogo.setImageDrawable(appIcon(item.packageName));
@@ -449,7 +439,6 @@ public class HomeActivity extends Activity {
     private void setLive(boolean on) {
         if (on && !liveOn) {
             heroArt.setVisibility(View.GONE);
-            ghost.setVisibility(View.GONE);
             if (live != null) {
                 tvView.setVisibility(View.VISIBLE);
                 live.start();
@@ -460,7 +449,6 @@ public class HomeActivity extends Activity {
                 tvView.setVisibility(View.INVISIBLE);
             }
             heroArt.setVisibility(View.VISIBLE);
-            ghost.setVisibility(View.VISIBLE);
         }
         liveOn = on;
     }
@@ -1279,7 +1267,6 @@ public class HomeActivity extends Activity {
         if (apps) {
             setLive(false);
             heroArt.setVisibility(View.GONE);
-            ghost.setVisibility(View.GONE);
         } else if (stageSlot == 0) {
             showStage(0);
         }

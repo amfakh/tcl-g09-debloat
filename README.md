@@ -228,7 +228,7 @@ Isi Home mengikuti desain MagicPath:
   OK di LIVE membuka Live TV full-screen di channel yang sama.
 - Di kanan LIVE ada tiga titik: tiga item pertama "Recommendations from Plex" (atau Recently added
   kalau baris itu kosong). Panah kanan pindah ke titik itu, siaran berhenti, dan hero menampilkan
-  gambar item itu full-screen, judul samar besar di kanan, logo app dan nama baris asalnya,
+  gambar item itu full-screen, logo app dan nama baris asalnya,
   judul, meta, dan deskripsi dua baris. Panah kiri kembali ke LIVE dan siaran jalan lagi.
 - Fokus di kartu mana pun juga mengganti hero dengan item kartu itu: logo app dan baris asalnya,
   meta (episode, tahun, atau channel; lalu sisa waktu atau durasi, dan kapan terakhir ditonton),
@@ -291,7 +291,7 @@ Dicek lagi 23 Oktober 2026, setelah hero dan stage dibuat:
 | Tes | Hasil |
 |---|---|
 | Fokus awal | Pill LIVE, siaran jalan (ada sesi TV input, screencap 0 byte) |
-| Kanan dari LIVE | Titik pick pertama, siaran berhenti, hero berisi gambar, judul samar, sumber, meta, deskripsi (`shots/stage-pick1f.png`) |
+| Kanan dari LIVE | Titik pick pertama, siaran berhenti, hero berisi gambar, sumber, meta, deskripsi (`shots/stage-pick1f.png`) |
 | Bawah ke kartu | Hero ganti ke item kartu (`shots/small-cards.png`), naik lagi kembali ke titik yang sama |
 | Kiri ke LIVE | Siaran jalan lagi, hero kembali ke nama channel |
 | Atas dari LIVE / bawah dari top bar | Tab Home / pill LIVE |
