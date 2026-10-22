@@ -238,10 +238,13 @@ public class HomeActivity extends Activity {
         appsPane.setFocusable(false);
         appsPane.setVisibility(View.GONE);
         // The pane starts at the 96 px left margin; the same right padding centers the grid on screen.
-        appsPane.setPadding(0, 0, px(96), 0);
+        // The top gap is the pane's own padding, so scrolling never pushes tiles up against the top bar.
+        appsPane.setPadding(0, px(48), px(96), 0);
         appsGrid = column();
-        // Each tile carries a 28 px right margin; the same on the left keeps the grid symmetric.
-        appsGrid.setPadding(px(28), px(56), 0, px(48));
+        // Each tile carries a 28 px right margin; the same on the left keeps the grid symmetric. The top
+        // padding leaves room for a focused tile's lift.
+        appsGrid.setPadding(px(28), px(16), 0, px(48));
+        appsGrid.setClipToPadding(false);
         appsPane.addView(appsGrid, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL));
         panes.addView(appsPane, new FrameLayout.LayoutParams(-1, -1));
 
@@ -1185,6 +1188,10 @@ public class HomeActivity extends Activity {
             if (has && isInside(v, rowsScroll)) {
                 lastCard = v;
             }
+            if (has && inFirstGridLine(v)) {
+                // The scroller only brings the tile itself into view; show the grid's top gap too.
+                appsPane.smoothScrollTo(0, 0);
+            }
         });
         cell.setOnClickListener(v -> {
             Intent launch = pm.getLeanbackLaunchIntentForPackage(pkg);
@@ -1509,6 +1516,7 @@ public class HomeActivity extends Activity {
         showingApps = apps;
         homePane.setVisibility(apps ? View.GONE : View.VISIBLE);
         appsPane.setVisibility(apps ? View.VISIBLE : View.GONE);
+        appsPane.scrollTo(0, 0);
         if (apps) {
             setLive(false);
             heroArt.setVisibility(View.GONE);
