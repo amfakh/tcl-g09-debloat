@@ -781,21 +781,21 @@ public class HomeActivity extends Activity {
      * @param title row title
      * @param logoPkg the app whose logo follows the title, or null for a row that mixes apps
      * @param items the cards
-     * @param namesApp whether each card names the app it opens (rows that mix apps)
+     * @param mixedRow whether the row mixes apps; its cards carry no corner label
      */
-    private void addRow(LinearLayout into, String title, String logoPkg, List<TvRows.Item> items, boolean namesApp) {
+    private void addRow(LinearLayout into, String title, String logoPkg, List<TvRows.Item> items, boolean mixedRow) {
         if (items.isEmpty()) {
             return;
         }
         LinearLayout row = new LinearLayout(this);
         for (TvRows.Item item : items) {
-            row.addView(card(item, title, namesApp));
+            row.addView(card(item, title, mixedRow));
         }
         into.addView(section(title, logoPkg, new HorizontalScrollView(this), row));
     }
 
     /**
-     * Wraps a horizontal row with its title and, for a row from one app, that app's logo.
+     * Wraps a horizontal row with its title and, for a row from one app, that app's logo before it.
      *
      * @param title row title
      * @param logoPkg the app whose logo follows the title, or null
@@ -807,9 +807,6 @@ public class HomeActivity extends Activity {
         LinearLayout box = column();
         LinearLayout head = new LinearLayout(this);
         head.setGravity(Gravity.CENTER_VERTICAL);
-        TextView t = text(26, TEXT, false);
-        t.setText(title);
-        head.addView(t);
         Drawable icon = appIcon(logoPkg);
         if (icon != null) {
             ImageView logo = new ImageView(this);
@@ -817,9 +814,12 @@ public class HomeActivity extends Activity {
             logo.setBackground(logoShape());
             logo.setClipToOutline(true);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(px(28), px(28));
-            lp.leftMargin = px(14);
+            lp.rightMargin = px(12);
             head.addView(logo, lp);
         }
+        TextView t = text(26, TEXT, false);
+        t.setText(title);
+        head.addView(t);
         box.addView(head);
         scroll.setHorizontalScrollBarEnabled(false);
         scroll.setClipToPadding(false);
@@ -861,16 +861,16 @@ public class HomeActivity extends Activity {
     }
 
     /**
-     * A 16:9 content card as in the design: artwork, a label top left (the app, channel or year), a
+     * A 16:9 content card as in the design: artwork, a label top left (channel or year, none in mixed rows), a
      * corner badge top right (time left, "Next" or the length), the title at the bottom and a progress
      * bar in the source's color. Focus shows the item in the hero; OK opens it.
      *
      * @param item what to show
      * @param rowTitle the row it sits in, for the hero
-     * @param namesApp whether to name the app on the card
+     * @param mixedRow whether the card sits in a row that mixes apps (no corner label)
      * @return the focusable card
      */
-    private View card(TvRows.Item item, String rowTitle, boolean namesApp) {
+    private View card(TvRows.Item item, String rowTitle, boolean mixedRow) {
         FrameLayout card = new FrameLayout(this);
         card.setFocusable(true);
         card.setTag(item.packageName + "|" + item.intentUri + "|" + item.title);
@@ -898,8 +898,8 @@ public class HomeActivity extends Activity {
             new int[] {Color.argb(150, 0, 0, 0), Color.argb(0, 0, 0, 0), Color.argb(210, 0, 0, 0)}));
         card.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
-        String label = namesApp || item.action != null ? appLabel(item.packageName)
-            : isYoutube ? item.author : isPlex ? item.author : null;
+        // Rows that mix apps leave the corner empty: the hero names the app once the card is focused.
+        String label = mixedRow || item.action != null ? null : isYoutube || isPlex ? item.author : null;
         if (label != null) {
             TextView kicker = text(15, Color.argb(220, 255, 255, 255), true);
             kicker.setText(label.toUpperCase());
@@ -983,19 +983,6 @@ public class HomeActivity extends Activity {
         Intent launch = getPackageManager().getLeanbackLaunchIntentForPackage(item.packageName);
         if (launch != null) {
             start(launch);
-        }
-    }
-
-    /**
-     * @param pkg package name
-     * @return the app's name, or null when unknown
-     */
-    private String appLabel(String pkg) {
-        try {
-            ApplicationInfo ai = getPackageManager().getApplicationInfo(pkg, 0);
-            return getPackageManager().getApplicationLabel(ai).toString();
-        } catch (Exception e) {
-            return null;
         }
     }
 

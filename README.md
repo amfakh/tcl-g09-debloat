@@ -235,7 +235,7 @@ Isi Home mengikuti desain MagicPath:
   dan deskripsi. Nama app tidak ditulis karena sudah diwakili logonya. Siaran berhenti selama fokus di baris, jadi tidak ada suara di belakang.
 - Urutan baris: Continue watching ("Plex + apps"), Recommendations from Plex, YouTube Recommended
   for you, Recently added, Your apps, YouTube Subscriptions, Movies in your library. Baris dari satu
-  app punya logo app itu di samping judulnya. Continue watching, yang isinya campuran, tanpa logo. Kartu menampilkan label kiri atas (aplikasi di Continue watching, tahun untuk Plex),
+  app punya logo app itu di kiri judulnya. Continue watching, yang isinya campuran, tanpa logo. Kartu menampilkan tahun di kiri atas untuk baris Plex (kartu di Continue watching tanpa label, appnya kelihatan di hero saat kartu difokus),
   badge kanan atas (sisa waktu, "Next", atau durasi), dan progress bar oranye untuk Plex, merah untuk
   YouTube, putih untuk aplikasi lain.
 - Navigasi: atas dari baris paling atas ke stage, atas dari stage ke tab aktif, bawah dari top bar
