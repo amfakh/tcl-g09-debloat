@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TCL Home</string>
+    <string name="row_apps">Your apps</string>
+    <string name="tab_home">Home</string>
+    <string name="tab_apps">Apps</string>
+    <string name="row_continue">Continue watching</string>
+    <string name="plex_sign_in">Sign in to Plex</string>
+    <string name="plex_card">Sign in to Plex to add your On Deck here</string>
+    <string name="plex_how">On your phone, open plex.tv/link and enter this code</string>
+    <string name="plex_waiting">Waiting for the code to be entered…</string>
+    <string name="plex_signed_in">Signed in. Your On Deck will show in Continue watching.</string>
+    <string name="plex_offline">plex.tv cannot be reached. Trying again…</string>
+    <string name="live_badge">LIVE</string>
+    <string name="live_hint">OK for full screen · Right for picks from your Plex · Down for your rows · CH+ / CH− to change channel</string>
+    <string name="live_source">Live TV · Antenna</string>
+    <string name="row_recently_added">Recently added</string>
+    <string name="row_movies">Movies in your library</string>
+    <string name="redirect_description">Opens TCL Home when the Google TV home screen appears.</string>
+    <string name="no_tuner">No antenna channels found. Scan channels in Live TV first.</string>
+</resources>

@@ -1,0 +1,74 @@
+# TCL Smart TV Pro (device G09, product G09_4K_GB, Amlogic T5M, armeabi-v7a, 2 GB RAM), 2023
+# Android 12 (Google TV), firmware STT2.230203.001.AS24, software V8-T800T02-LF1V157, used in Indonesia.
+# Based on examples/tcl-g09-google-tv in github.com/Gathin23/cleanyourtv (same product and build).
+#
+# Apply:   tools/debloat.sh
+# Undo:    tools/restore.sh
+# Everything is DISABLED for user 0, never uninstalled. Comment out a line to keep that app.
+#
+# Stock launcher com.google.android.apps.tv.launcherx and the setup wizard
+# com.google.android.tungsten.setupwraith stay enabled: there is no replacement launcher yet, and
+# setupwraith owns a saved Wi-Fi network on this set (disabling it deletes that network).
+# Never disable: com.tcl.tv (Live TV, HDMI playback), com.tcl.tvinput (HDMI and tuner inputs),
+# com.tcl.suspension (Input menu), com.tcl.dashboard, com.tcl.autopair (remote pairing),
+# com.tcl.systemserver (mic hotkeys), com.tcl.providers.config, com.tcl.globalkeyoverlay, Play Store,
+# Play Services, the keyboards. com.tcl.factory.view is a factory package: never launch it.
+# Firmware updates come through Play Services on this build, so com.tcl.ttvs can go.
+# Already disabled before the first run: com.tcl.ocean.instructions, com.google.android.youtube.tvmusic.
+# restore.sh leaves those two off.
+
+# TCL telemetry and analytics
+com.tcl.ttvs                           # TCL BI, awareness and identifier services
+com.tcl.logkit                         # log capture and upload
+com.tcl.interactive                    # TCL TIAS background service
+com.google.android.feedback
+com.mirakulo.astrotv.service           # Ginga, Brazil's ISDB-Tb broadcast apps; unused on DVB-T2
+
+# TCL content, ads and promos
+com.tcl.channelplus                    # TCL Live FAST channels, also removes them from Live TV
+com.tcl.waterfall.overseas             # TCL content "waterfall" recommendations
+com.tcl.tv.tclhome_passive             # pushes TCL content to the home screen at boot
+com.tcl.partnercustomizer              # TCL tweaks to the Google TV home rows
+com.tcl.messagebox                     # TCL pushed messages and promos
+android.autoinstalls.config.google.gtvpai  # partner auto-installs
+
+# Background services
+com.tcl.guard                          # TGuard: device-use tracking, memory cleaner
+com.tcl.useragreement                  # EULA and privacy screens
+com.tcl.usercenter                     # TCL account sign-in
+com.tcl.exhibit                        # store demo
+com.tcl.esticker                       # store demo stickers
+com.tcl.hotelmenu                      # hotel mode
+com.tcl.smartalexa                     # Alexa client
+
+# Preloaded apps
+com.tcl.ocean.instructions             # e-manual
+com.tcl.repairguide
+com.tcl.gamebar                        # re-enable for the console game-mode overlay
+com.tcl.UpdatePeripheral               # re-enable to update a TCL soundbar
+com.tcl.hearaid                        # hearing test and volume adaptation
+com.google.android.marvin.talkback
+com.google.android.play.games
+com.google.android.youtube.tvmusic
+com.google.android.apps.tv.dreamx      # Ambient mode screensaver; Aerial Views is the screensaver here
+
+# Off by choice
+com.amazon.amazonvideo.livingroom      # Prime Video
+com.tcl.miracast                       # screen mirroring from Android phones
+com.tcl.magiconnectfree                # TCL MagiConnect phone app bridge
+com.tcl.ui_mediaCenter                 # USB media player (VLC and Kodi are installed)
+
+# Third-party launcher (installed by the owner, not bloat): with it disabled, Google TV is Home again
+com.overdevs.at4k                      # AT4K Launcher: starts at boot and covers Google TV via an accessibility service
+
+# Kept by choice: uncomment to disable
+# com.google.android.apps.mediashell   # Chromecast built-in
+# com.tcl.airplay2                     # AirPlay, together with the next line
+# com.amlogic.airplay
+# com.google.android.tv.remote.service # Google TV phone remote, also the remote's mic path
+# com.google.android.katniss           # Google Assistant voice search
+# com.tcl.initsetup                    # first-run setup and antenna channel scan
+# com.netflix.ninja                    # Netflix, together with the next line
+# com.netflix.tokenmanager
+# com.google.android.youtube.tv        # YouTube
+# com.google.android.videos            # Google TV Shop and Library tabs

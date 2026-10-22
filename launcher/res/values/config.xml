@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Everything someone changes on this TV lives here. Edit, then run tools/build-install.sh. -->
+<resources>
+    <!-- Live antenna TV behind Home. false shows a plain dark background. -->
+    <bool name="show_live_tv">true</bool>
+
+    <!-- Letter on the round profile button at the top left (it opens the Google TV profile chooser). -->
+    <string name="profile_initial" translatable="false">R</string>
+
+    <!-- The tuner input that plays antenna TV on this TCL G09 (from `dumpsys tv_input`). -->
+    <string name="live_tv_input" translatable="false">com.tcl.tvinput/.TunerInputService/HW2</string>
+
+    <!-- Apps for the "Your apps" row, in order. Installed apps not listed here follow, A to Z,
+         unless they are in hidden_apps. -->
+    <string-array name="dock_apps" translatable="false">
+        <item>com.tcl.tv</item>
+        <item>com.plexapp.android</item>
+        <item>com.google.android.youtube.tv</item>
+        <item>io.gh.reisxd.tizentube.cobalt</item>
+        <item>com.maxstream.tv</item>
+        <item>com.vidio.android.tv</item>
+        <item>com.netflix.ninja</item>
+        <item>com.spotify.tv.android</item>
+    </string-array>
+
+    <!-- Apps never shown on Home. -->
+    <string-array name="hidden_apps" translatable="false">
+        <item>com.android.tv.settings</item>
+        <item>com.overdevs.at4k</item>
+        <item>com.spauldhaliwal.dispatch</item>
+        <item>com.tcl.browser</item>
+    </string-array>
+
+    <!-- Continue watching comes from the system Watch Next list ("continue" and "next episode" only).
+         These apps are left out: the browser files articles there, VLC private file names. -->
+    <string-array name="watch_next_excluded" translatable="false">
+        <item>com.tcl.browser</item>
+        <item>org.videolan.vlc</item>
+    </string-array>
+
+    <!-- Rows taken from YouTube's own channels in the TV provider, by channel name, in this order. -->
+    <string name="youtube_package" translatable="false">com.google.android.youtube.tv</string>
+    <string-array name="youtube_rows" translatable="false">
+        <item>Recommended for you</item>
+        <item>Subscriptions</item>
+    </string-array>
+
+    <!-- Google TV's own home screen. Whenever it comes up, HomeRedirectService opens TCL Home over it;
+         other Google TV screens (the profile chooser) stay reachable. -->
+    <string name="stock_home_activity" translatable="false">com.google.android.apps.tv.launcherx.home.HomeActivity</string>
+
+    <!-- Plex's own channel in the TV provider: a row of its own, and the three picks right of LIVE. -->
+    <string name="plex_recommendations" translatable="false">Recommendations from Plex</string>
+
+    <!-- Plex On Deck in Continue watching. Sign in once with the card in that row (plex.tv/link). -->
+    <bool name="plex_enabled">true</bool>
+    <!-- Plex Home user whose On Deck fills Continue watching on this TV, by position in the account's
+         Plex Home list (user #2; #3 is for the other TV). It must be a user without a PIN. -->
+    <integer name="plex_home_user">2</integer>
+</resources>

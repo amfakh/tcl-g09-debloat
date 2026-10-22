@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- TCL Home: a home screen for this TCL Google TV. Plain Android framework, no AndroidX, no native code. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.tcl.home"
+    android:versionCode="1"
+    android:versionName="0.1">
+
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="31" />
+
+    <!-- Channel list for the live TV behind Home; granted by tools/build-install.sh. -->
+    <uses-permission android:name="android.permission.READ_TV_LISTINGS" />
+    <!-- Card artwork: apps publish https image URLs in the TV provider. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <!-- Android 11+ hides other apps unless the launcher says which ones it looks for. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+        </intent>
+    </queries>
+
+    <application
+        android:label="@string/app_name"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
+        <activity
+            android:name=".HomeActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:stateNotNeeded="true"
+            android:clearTaskOnLaunch="true"
+            android:excludeFromRecents="true"
+            android:screenOrientation="landscape"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Exported so the sign-in screen can also be opened over ADB:
+             am start -n dev.tcl.home/.PlexLoginActivity -->
+        <activity
+            android:name=".PlexLoginActivity"
+            android:exported="true"
+            android:excludeFromRecents="true" />
+
+        <!-- Opens TCL Home whenever Google TV's home screen shows; enabled by tools/build-install.sh. -->
+        <service
+            android:name=".HomeRedirectService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/home_redirect_service" />
+        </service>
+    </application>
+</manifest>
