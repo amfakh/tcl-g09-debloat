@@ -21,4 +21,8 @@
     <string name="tile_move">Move</string>
     <string name="tile_info">App info</string>
     <string name="tile_uninstall">Uninstall</string>
+    <string name="tile_add_favorite">Add to favorites</string>
+    <string name="tile_remove_favorite">Remove from favorites</string>
+    <string name="grid_favorites">Favorites</string>
+    <string name="all_apps">All apps</string>
 </resources>

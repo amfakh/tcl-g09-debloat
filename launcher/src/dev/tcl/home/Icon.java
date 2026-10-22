@@ -9,7 +9,8 @@ import android.view.View;
 
 /**
  * Line icons for the top bar, drawn in code so the launcher needs no image files: search, picture
- * (ambient mode), gear (settings) and, under the clock, the sky and a raindrop for the chance of rain.
+ * (ambient mode), gear (settings), a 3x3 grid (All apps), chevrons for moving a tile and, under the
+ * clock, the sky and a raindrop for the chance of rain.
  * Drawn on a 24x24 grid, scaled to the view.
  */
 final class Icon extends View {
@@ -25,6 +26,9 @@ final class Icon extends View {
     static final int STORM = 9;
     static final int PARTLY_NIGHT = 10;
     static final int DROP = 11;
+    static final int GRID = 12;
+    static final int CHEVRON_LEFT = 13;
+    static final int CHEVRON_RIGHT = 14;
 
     private int kind;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -118,6 +122,19 @@ final class Icon extends View {
             drop.cubicTo(18.5f, 11, 12, 3.5f, 12, 3.5f);
             drop.close();
             canvas.drawPath(drop, paint);
+        } else if (kind == GRID) {
+            for (int row = 0; row < 3; row++) {
+                for (int col = 0; col < 3; col++) {
+                    float x = 3.5f + 6.5f * col;
+                    float y = 3.5f + 6.5f * row;
+                    canvas.drawRoundRect(new RectF(x, y, x + 4, y + 4), 1, 1, paint);
+                }
+            }
+        } else if (kind == CHEVRON_LEFT || kind == CHEVRON_RIGHT) {
+            float tip = kind == CHEVRON_LEFT ? 8.5f : 15.5f;
+            float back = kind == CHEVRON_LEFT ? 15 : 9;
+            canvas.drawLine(back, 5.5f, tip, 12, paint);
+            canvas.drawLine(tip, 12, back, 18.5f, paint);
         } else if (kind == STORM) {
             canvas.drawPath(cloud(0, -3), paint);
             Path bolt = new Path();

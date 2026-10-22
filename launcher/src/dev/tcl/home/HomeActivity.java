@@ -61,6 +61,8 @@ public class HomeActivity extends Activity {
     private static final int MOVE_RING = Color.rgb(0xff, 0xe5, 0x99);
     private static final String PLEX_PKG = "com.plexapp.android";
     private static final String LIVE_TV_PKG = "com.tcl.tv";
+    // Tag of the All apps tile that ends the Your apps row.
+    private static final String ALL_APPS = "all-apps";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService background = Executors.newSingleThreadExecutor();
@@ -716,8 +718,13 @@ public class HomeActivity extends Activity {
      * @return the first tile of the Apps grid, or null
      */
     private View firstGridTile() {
-        LinearLayout line = appsGrid.getChildCount() > 0 ? (LinearLayout) appsGrid.getChildAt(0) : null;
-        return line != null && line.getChildCount() > 0 ? line.getChildAt(0) : null;
+        for (int i = 0; i < appsGrid.getChildCount(); i++) {
+            View child = appsGrid.getChildAt(i);
+            if (child instanceof LinearLayout && ((LinearLayout) child).getChildCount() > 0) {
+                return ((LinearLayout) child).getChildAt(0);
+            }
+        }
+        return null;
     }
 
     /**
@@ -1095,8 +1102,9 @@ public class HomeActivity extends Activity {
     // ---- Apps -----------------------------------------------------------------------------------
 
     /**
-     * Fills the app row and the Apps grid: the order saved by moving tiles (or dock_apps until a tile
-     * was ever moved), then the other TV apps A to Z, minus hidden_apps.
+     * Fills the Your apps row with the favorites in their order, ending with an All apps tile, and the
+     * Apps grid with a Favorites section and an All apps section A to Z. Favorites are dock_apps until
+     * they are first changed from the held-OK menu. hidden_apps never show.
      */
     private void loadApps() {
         PackageManager pm = getPackageManager();
@@ -1108,27 +1116,58 @@ public class HomeActivity extends Activity {
         Set<String> hidden = new HashSet<>(Arrays.asList(getResources().getStringArray(R.array.hidden_apps)));
         hidden.add(getPackageName());
 
-        List<ResolveInfo> ordered = new ArrayList<>();
-        String saved = getSharedPreferences("apps", MODE_PRIVATE).getString("order", null);
-        String[] first = saved != null ? saved.split("\n") : getResources().getStringArray(R.array.dock_apps);
-        for (String pkg : first) {
-            ResolveInfo ri = byPkg.remove(pkg);
-            if (ri != null && !hidden.contains(pkg)) {
-                ordered.add(ri);
+        byPkg.keySet().removeAll(hidden);
+        List<ResolveInfo> favorites = new ArrayList<>();
+        String saved = getSharedPreferences("apps", MODE_PRIVATE).getString("favorites", null);
+        for (String pkg : saved != null ? saved.split("\n") : getResources().getStringArray(R.array.dock_apps)) {
+            ResolveInfo ri = byPkg.get(pkg);
+            if (ri != null) {
+                favorites.add(ri);
             }
         }
-        List<ResolveInfo> rest = new ArrayList<>(byPkg.values());
-        rest.removeIf(ri -> hidden.contains(ri.activityInfo.packageName));
-        rest.sort((a, b) -> a.loadLabel(pm).toString().compareToIgnoreCase(b.loadLabel(pm).toString()));
-        ordered.addAll(rest);
+        List<ResolveInfo> all = new ArrayList<>(byPkg.values());
+        all.sort((a, b) -> a.loadLabel(pm).toString().compareToIgnoreCase(b.loadLabel(pm).toString()));
 
         appRow.removeAllViews();
-        for (ResolveInfo ri : ordered) {
-            appRow.addView(tile(pm, ri, true));
+        for (ResolveInfo ri : favorites) {
+            appRow.addView(tile(pm, ri, true, true));
         }
+        if (!favorites.isEmpty()) {
+            // A thin rule between the favorites and the All apps tile, centered on the cards.
+            View rule = new View(this);
+            rule.setBackgroundColor(Color.argb(90, 241, 243, 244));
+            LinearLayout.LayoutParams ruleLp = new LinearLayout.LayoutParams(px(2), px(96));
+            ruleLp.topMargin = px((135 - 96) / 2f);
+            ruleLp.rightMargin = px(28);
+            appRow.addView(rule, ruleLp);
+        }
+        appRow.addView(allAppsTile());
         appsGrid.removeAllViews();
+        if (!favorites.isEmpty()) {
+            addGridSection(getString(R.string.grid_favorites), pm, favorites);
+        }
+        addGridSection(getString(R.string.all_apps), pm, all);
+        if (!rowsExpanded) {
+            // The collapsed rows are sized to the apps row, which just changed.
+            setRowsExpanded(false);
+        }
+    }
+
+    /**
+     * Adds a titled block of app tiles to the Apps grid, GRID_COLUMNS to a line.
+     *
+     * @param title the block's title
+     * @param pm package manager for labels and artwork
+     * @param apps the apps, in order
+     */
+    private void addGridSection(String title, PackageManager pm, List<ResolveInfo> apps) {
+        TextView head = text(26, TEXT, false);
+        head.setText(title);
+        LinearLayout.LayoutParams headLp = new LinearLayout.LayoutParams(-2, -2);
+        headLp.bottomMargin = px(20);
+        appsGrid.addView(head, headLp);
         LinearLayout line = null;
-        for (int n = 0; n < ordered.size(); n++) {
+        for (int n = 0; n < apps.size(); n++) {
             if (n % GRID_COLUMNS == 0) {
                 line = new LinearLayout(this);
                 line.setClipChildren(false);
@@ -1136,23 +1175,81 @@ public class HomeActivity extends Activity {
                 lineLp.bottomMargin = px(28);
                 appsGrid.addView(line, lineLp);
             }
-            line.addView(tile(pm, ordered.get(n), false));
+            line.addView(tile(pm, apps.get(n), false, isFavorite(apps.get(n))));
+        }
+        if (line != null) {
+            ((LinearLayout.LayoutParams) line.getLayoutParams()).bottomMargin = px(48);
         }
     }
 
     /**
-     * One app card: the app's TV banner (or its icon), its name under it, a ring and a lift on focus.
+     * One app card: the app's TV banner (or its icon) and its name. OK opens the app (Live TV on Home's
+     * channel); holding OK opens the app's menu.
      *
      * @param pm package manager for labels and artwork
      * @param ri the app's launcher activity
-     * @param movable whether the held-OK menu offers moving it along its row (the Your apps row)
+     * @param movable whether the menu offers moving it along its row (favorites on Home)
+     * @param favorite whether the app is a favorite
      * @return the focusable tile
      */
-    private View tile(PackageManager pm, ResolveInfo ri, boolean movable) {
+    private View tile(PackageManager pm, ResolveInfo ri, boolean movable, boolean favorite) {
         String pkg = ri.activityInfo.packageName;
+        ImageView art = new ImageView(this);
+        Drawable banner = ri.activityInfo.loadBanner(pm);
+        art.setImageDrawable(banner != null ? banner : ri.loadIcon(pm));
+        if (banner != null) {
+            art.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        }
+        LinearLayout cell = tileShell(pkg, art, banner != null, ri.loadLabel(pm).toString());
+        cell.setOnClickListener(v -> {
+            if (LIVE_TV_PKG.equals(pkg)) {
+                openLiveTv();
+                return;
+            }
+            Intent launch = pm.getLeanbackLaunchIntentForPackage(pkg);
+            if (launch != null) {
+                start(launch);
+            }
+        });
+        cell.setOnLongClickListener(v -> {
+            showTileMenu(v, ri, movable, favorite);
+            return true;
+        });
+        return cell;
+    }
+
+    /**
+     * The tile that ends the Your apps row and opens the Apps grid.
+     *
+     * @return the focusable tile
+     */
+    private View allAppsTile() {
+        Icon art = new Icon(this, Icon.GRID);
+        art.setColor(TEXT);
+        LinearLayout cell = tileShell(ALL_APPS, art, false, getString(R.string.all_apps));
+        cell.setOnClickListener(v -> {
+            showApps(true);
+            View first = firstGridTile();
+            if (first != null) {
+                first.requestFocus();
+            }
+        });
+        return cell;
+    }
+
+    /**
+     * What every app tile looks like: a 16:9 card with a name under it, a ring and a lift on focus.
+     *
+     * @param tag the tile's tag (its package)
+     * @param art what fills the card
+     * @param fills whether art fills the card (a banner) rather than sitting in its middle (an icon)
+     * @param label the name under the card
+     * @return the focusable tile, without click handlers
+     */
+    private LinearLayout tileShell(String tag, View art, boolean fills, String label) {
         LinearLayout cell = column();
         cell.setFocusable(true);
-        cell.setTag(pkg);
+        cell.setTag(tag);
 
         FrameLayout card = new FrameLayout(this);
         GradientDrawable fill = new GradientDrawable();
@@ -1163,21 +1260,15 @@ public class HomeActivity extends Activity {
         GradientDrawable ring = new GradientDrawable();
         ring.setCornerRadius(px(16));
         card.setForeground(ring);
-        ImageView art = new ImageView(this);
-        Drawable banner = ri.activityInfo.loadBanner(pm);
-        if (banner != null) {
-            art.setImageDrawable(banner);
-            art.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            card.addView(art, new FrameLayout.LayoutParams(-1, -1));
-        } else {
-            art.setImageDrawable(ri.loadIcon(pm));
-            card.addView(art, new FrameLayout.LayoutParams(px(96), px(96), Gravity.CENTER));
-        }
+        card.addView(art, fills ? new FrameLayout.LayoutParams(-1, -1)
+            : new FrameLayout.LayoutParams(px(96), px(96), Gravity.CENTER));
+        // Shown only while the tile is being moved, toward the sides it can still move to.
+        card.addView(chevron(Icon.CHEVRON_LEFT), chevronLp(Gravity.START));
+        card.addView(chevron(Icon.CHEVRON_RIGHT), chevronLp(Gravity.END));
         cell.addView(card, new LinearLayout.LayoutParams(px(240), px(135)));
 
         TextView name = text(19, MUTED, false);
-        name.setText(ri.loadLabel(pm));
-        name.setTag(ri.loadLabel(pm).toString());
+        name.setText(label);
         name.setSingleLine(true);
         name.setPadding(px(6), px(10), 0, 0);
         cell.addView(name, new LinearLayout.LayoutParams(px(240), -2));
@@ -1197,32 +1288,20 @@ public class HomeActivity extends Activity {
                 appsPane.smoothScrollTo(0, 0);
             }
         });
-        cell.setOnClickListener(v -> {
-            if (LIVE_TV_PKG.equals(pkg)) {
-                openLiveTv();
-                return;
-            }
-            Intent launch = pm.getLeanbackLaunchIntentForPackage(pkg);
-            if (launch != null) {
-                start(launch);
-            }
-        });
-        cell.setOnLongClickListener(v -> {
-            showTileMenu(v, ri, movable);
-            return true;
-        });
         return cell;
     }
 
     /**
-     * The menu for a held app tile: Move (Your apps row only), App info, and Uninstall for apps that
-     * can be removed. Uninstall opens the system's own confirmation.
+     * The menu for a held app tile: Move (favorites on Home only), Add to or Remove from favorites,
+     * App info, and Uninstall for apps that can be removed. Uninstall opens the system's own
+     * confirmation.
      *
      * @param cell the held tile
      * @param ri the app's launcher activity
      * @param movable whether the tile can be moved along its row
+     * @param favorite whether the app is a favorite
      */
-    private void showTileMenu(View cell, ResolveInfo ri, boolean movable) {
+    private void showTileMenu(View cell, ResolveInfo ri, boolean movable, boolean favorite) {
         String pkg = ri.activityInfo.packageName;
         ApplicationInfo ai = ri.activityInfo.applicationInfo;
         boolean removable = (ai.flags & ApplicationInfo.FLAG_SYSTEM) == 0
@@ -1236,6 +1315,16 @@ public class HomeActivity extends Activity {
                 paintMoving(cell, true);
             });
         }
+        labels.add(getString(favorite ? R.string.tile_remove_favorite : R.string.tile_add_favorite));
+        actions.add(() -> {
+            List<String> favorites = favorites();
+            if (favorite) {
+                favorites.remove(pkg);
+            } else {
+                favorites.add(pkg);
+            }
+            saveFavorites(favorites, cell);
+        });
         labels.add(getString(R.string.tile_info));
         actions.add(() -> start(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
             Uri.fromParts("package", pkg, null))));
@@ -1250,7 +1339,41 @@ public class HomeActivity extends Activity {
     }
 
     /**
-     * Marks the tile being moved: a yellow ring and arrows around its name.
+     * A chevron over a dark gradient the card's full height, fading in from that edge; hidden until a
+     * tile is moved.
+     *
+     * @param kind Icon.CHEVRON_LEFT or Icon.CHEVRON_RIGHT, also its tag
+     * @return the edge shade
+     */
+    private View chevron(int kind) {
+        boolean left = kind == Icon.CHEVRON_LEFT;
+        FrameLayout shade = new FrameLayout(this);
+        shade.setTag(kind);
+        shade.setBackground(new GradientDrawable(
+            left ? GradientDrawable.Orientation.LEFT_RIGHT : GradientDrawable.Orientation.RIGHT_LEFT,
+            new int[] {Color.argb(210, 0, 0, 0), Color.argb(0, 0, 0, 0)}));
+        Icon icon = new Icon(this, kind);
+        icon.setColor(MOVE_RING);
+        FrameLayout.LayoutParams iconLp = new FrameLayout.LayoutParams(px(36), px(36),
+            (left ? Gravity.START : Gravity.END) | Gravity.CENTER_VERTICAL);
+        iconLp.setMarginStart(px(6));
+        iconLp.setMarginEnd(px(6));
+        shade.addView(icon, iconLp);
+        shade.setVisibility(View.GONE);
+        return shade;
+    }
+
+    /**
+     * @param side Gravity.START or Gravity.END
+     * @return layout for a chevron shade along that edge of a card
+     */
+    private FrameLayout.LayoutParams chevronLp(int side) {
+        return new FrameLayout.LayoutParams(px(72), -1, side);
+    }
+
+    /**
+     * Marks the tile being moved: a yellow ring, and chevrons on the card's edges toward the sides it
+     * can still move to.
      *
      * @param cell a tile made by tile()
      * @param moving whether it is being moved
@@ -1259,8 +1382,11 @@ public class HomeActivity extends Activity {
         LinearLayout c = (LinearLayout) cell;
         GradientDrawable ring = (GradientDrawable) c.getChildAt(0).getForeground();
         ring.setStroke(px(moving ? 6 : 4), moving ? MOVE_RING : TEXT);
-        TextView name = (TextView) c.getChildAt(1);
-        name.setText(moving ? "◀  " + name.getTag() + "  ▶" : (String) name.getTag());
+        ViewGroup card = (ViewGroup) c.getChildAt(0);
+        int at = appRow.indexOfChild(cell);
+        card.findViewWithTag(Icon.CHEVRON_LEFT).setVisibility(moving && at > 0 ? View.VISIBLE : View.GONE);
+        card.findViewWithTag(Icon.CHEVRON_RIGHT).setVisibility(
+            moving && at < favorites().size() - 1 ? View.VISIBLE : View.GONE);
     }
 
     /**
@@ -1272,12 +1398,14 @@ public class HomeActivity extends Activity {
     private void moveTile(int step) {
         int i = appRow.indexOfChild(movingTile);
         int j = i + step;
-        if (j < 0 || j >= appRow.getChildCount()) {
+        // Favorites only: the rule and the All apps tile always stay last.
+        if (j < 0 || j >= favorites().size()) {
             return;
         }
         View other = appRow.getChildAt(j);
         appRow.removeView(other);
         appRow.addView(other, i);
+        paintMoving(movingTile, true);
         movingTile.post(() -> {
             Rect r = new Rect();
             movingTile.getDrawingRect(r);
@@ -1285,18 +1413,55 @@ public class HomeActivity extends Activity {
         });
     }
 
-    /** Ends a move: saves the row's order, rebuilds the row and the Apps grid in it, keeps focus. */
+    /** Ends a move: saves the favorites in the row's new order. */
     private void finishMove() {
-        StringBuilder order = new StringBuilder();
-        for (int i = 0; i < appRow.getChildCount(); i++) {
-            order.append(appRow.getChildAt(i).getTag()).append('\n');
-        }
-        getSharedPreferences("apps", MODE_PRIVATE).edit().putString("order", order.toString().trim()).apply();
-        Object pkg = movingTile.getTag();
-        paintMoving(movingTile, false);
+        View cell = movingTile;
+        paintMoving(cell, false);
         movingTile = null;
+        saveFavorites(favorites(), cell);
+    }
+
+    /**
+     * @return the favorites in the order the Your apps row shows them
+     */
+    private List<String> favorites() {
+        List<String> out = new ArrayList<>();
+        for (int i = 0; i < appRow.getChildCount(); i++) {
+            Object tag = appRow.getChildAt(i).getTag();
+            if (tag != null && !ALL_APPS.equals(tag)) {
+                out.add((String) tag);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * @param ri an app
+     * @return whether it is a favorite (in the Your apps row)
+     */
+    private boolean isFavorite(ResolveInfo ri) {
+        return appRow.findViewWithTag(ri.activityInfo.packageName) != null;
+    }
+
+    /**
+     * Saves the favorites, rebuilds the row and the grid, and puts focus back where the change was made:
+     * on the same app when it is still in the same place, else on its neighbor there.
+     *
+     * @param favorites the favorites, in order
+     * @param cell the tile the change was made from
+     */
+    private void saveFavorites(List<String> favorites, View cell) {
+        getSharedPreferences("apps", MODE_PRIVATE).edit().putString("favorites", TextUtils.join("\n", favorites)).apply();
+        ViewGroup line = (ViewGroup) cell.getParent();
+        int at = line.indexOfChild(cell);
+        boolean onHome = line == appRow;
+        Object pkg = cell.getTag();
         loadApps();
-        View again = appRow.findViewWithTag(pkg);
+        View again = (onHome ? appRow : appsGrid).findViewWithTag(pkg);
+        if (again == null && onHome) {
+            int count = favorites().size();
+            again = count > 0 ? appRow.getChildAt(Math.min(at, count - 1)) : appRow.findViewWithTag(ALL_APPS);
+        }
         if (again != null) {
             again.requestFocus();
         }

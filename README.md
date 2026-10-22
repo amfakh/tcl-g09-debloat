@@ -206,7 +206,7 @@ Ubah tampilan dan isi lewat `launcher/res/values/config.xml`, lalu jalankan `too
 | `profile_initial` | Huruf di tombol profil bulat kiri atas, sebelum foto user Plex kebaca |
 | `show_live_tv` | TV antena live di belakang Home |
 | `live_tv_input` | Input tuner (`com.tcl.tvinput/.TunerInputService/HW2`) |
-| `dock_apps` | Urutan awal aplikasi di baris "Your apps" sebelum ada yang digeser dari remote; aplikasi lain menyusul urut abjad |
+| `dock_apps` | Favorit awal (baris "Your apps") sebelum favorit pernah diubah dari remote |
 | `hidden_apps` | Aplikasi yang tidak pernah tampil |
 | `watch_next_excluded` | Aplikasi yang dibuang dari Continue watching (TCL browser, VLC) |
 | `youtube_package`, `youtube_rows` | Channel YouTube di TvProvider yang jadi baris, berurutan |
@@ -228,8 +228,7 @@ Home dibuka. Sebelum bacaan pertama, baris cuacanya belum muncul. Ikonnya: matah
 dan petir. Tombol profil memakai foto user Plex
 di `plex_home_user` (huruf `profile_initial` sebelum fotonya kebaca) dan membuka pemilih profil
 Google TV. Foto akun Google tidak bisa dibaca app pihak ketiga. Search membuka pencarian Google TV
-dalam mode suara. Apps membuka grid kartu semua aplikasi di tengah layar (6 kolom, urutan sama dengan baris
-"Your apps").
+dalam mode suara. Apps membuka grid kartu aplikasi di tengah layar (6 kolom): Favorites, lalu All apps.
 
 Isi Home mengikuti desain MagicPath:
 - Hero di atas baris. Default-nya stage LIVE: siaran antena full-screen di belakang, nama channel,
@@ -255,11 +254,17 @@ Isi Home mengikuti desain MagicPath:
   app punya logo app itu di kiri judulnya. Continue watching, yang isinya campuran, tanpa logo. Kartu menampilkan tahun di kiri atas untuk baris Plex (kartu di Continue watching tanpa label, appnya kelihatan di hero saat kartu difokus),
   badge kanan atas (sisa waktu, "Next", atau durasi), dan progress bar oranye untuk Plex, merah untuk
   YouTube, putih untuk aplikasi lain.
-- Tahan OK di tile aplikasi untuk membuka menunya: Move (khusus baris Your apps), App info, dan
-  Uninstall (hanya untuk app yang bisa dihapus; app sistem tidak). Move menandai tile dengan ring
-  kuning dan panah di namanya, kiri/kanan menggeser posisinya, lalu OK atau Back menyimpan. Urutan
-  disimpan di TV (bukan di `config.xml`) dan dipakai juga oleh grid Apps. App baru menyusul di
-  belakang, urut abjad. Uninstall membuka konfirmasi bawaan sistem.
+- Baris Your apps hanya berisi app favorit, ditutup garis pemisah tipis dan tile All apps (ikon kotak 3×3) yang membuka tab Apps.
+  Grid Apps punya dua bagian: Favorites (urutan sama dengan baris Your apps) dan All apps (semua app,
+  A–Z, selalu dihitung ulang, jadi app baru langsung masuk di posisi abjadnya). Favorit awal diambil
+  dari `dock_apps`; setelah diubah dari remote, daftarnya disimpan di TV, bukan di `config.xml`.
+- Tahan OK di tile aplikasi untuk membuka menunya. Di favorit: Move (khusus di baris Your apps),
+  Remove from favorites, App info, dan Uninstall. Di app lain: Add to favorites, App info, dan
+  Uninstall. Uninstall hanya muncul untuk app yang bisa dihapus (app sistem tidak) dan membuka
+  konfirmasi bawaan sistem. Move menandai tile dengan ring kuning dan chevron di atas gradasi gelap di tepi kiri/kanan card ke arah yang masih bisa
+  dituju (app paling kiri cuma chevron kanan, favorit terakhir cuma chevron kiri), kiri/kanan
+  menggeser posisinya di antara favorit (tidak bisa melewati tile All apps), lalu OK atau Back
+  menyimpan.
 - Navigasi: atas dari Your apps ke stage, atas dari stage ke tab aktif, bawah dari top bar ke stage,
   bawah dari stage ke kartu terakhir (atau aplikasi pertama).
 
