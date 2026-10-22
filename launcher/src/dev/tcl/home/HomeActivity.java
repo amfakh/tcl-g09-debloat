@@ -191,6 +191,11 @@ public class HomeActivity extends Activity {
         scrimBottom.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
             new int[] {Color.argb(130, 0, 0, 0), Color.argb(0, 0, 0, 0), Color.argb(170, 15, 16, 18), Color.argb(240, 15, 16, 18)}));
         root.addView(scrimBottom, new FrameLayout.LayoutParams(-1, -1));
+        // Behind the top bar: keeps the clock and the pills readable over bright live TV or artwork.
+        View scrimTop = new View(this);
+        scrimTop.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+            new int[] {Color.argb(200, 0, 0, 0), Color.argb(120, 0, 0, 0), Color.argb(0, 0, 0, 0)}));
+        root.addView(scrimTop, new FrameLayout.LayoutParams(-1, px(380), Gravity.TOP));
 
         LinearLayout overlay = new LinearLayout(this);
         overlay.setOrientation(LinearLayout.VERTICAL);
