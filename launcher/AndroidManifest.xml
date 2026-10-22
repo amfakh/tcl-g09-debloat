@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.READ_TV_LISTINGS" />
     <!-- Card artwork: apps publish https image URLs in the TV provider. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Uninstall from a held app tile; the system still asks for confirmation. -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
 
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />

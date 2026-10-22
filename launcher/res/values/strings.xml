@@ -18,4 +18,7 @@
     <string name="row_movies">Movies in your library</string>
     <string name="redirect_description">Opens TCL Home when the Google TV home screen appears.</string>
     <string name="no_tuner">No antenna channels found. Scan channels in Live TV first.</string>
+    <string name="tile_move">Move</string>
+    <string name="tile_info">App info</string>
+    <string name="tile_uninstall">Uninstall</string>
 </resources>

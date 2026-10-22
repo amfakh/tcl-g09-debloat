@@ -206,7 +206,7 @@ Ubah tampilan dan isi lewat `launcher/res/values/config.xml`, lalu jalankan `too
 | `profile_initial` | Huruf di tombol profil bulat kiri atas, sebelum foto user Plex kebaca |
 | `show_live_tv` | TV antena live di belakang Home |
 | `live_tv_input` | Input tuner (`com.tcl.tvinput/.TunerInputService/HW2`) |
-| `dock_apps` | Urutan aplikasi di baris "Your apps"; aplikasi lain menyusul urut abjad |
+| `dock_apps` | Urutan awal aplikasi di baris "Your apps" sebelum ada yang digeser dari remote; aplikasi lain menyusul urut abjad |
 | `hidden_apps` | Aplikasi yang tidak pernah tampil |
 | `watch_next_excluded` | Aplikasi yang dibuang dari Continue watching (TCL browser, VLC) |
 | `youtube_package`, `youtube_rows` | Channel YouTube di TvProvider yang jadi baris, berurutan |
@@ -251,6 +251,11 @@ Isi Home mengikuti desain MagicPath:
   app punya logo app itu di kiri judulnya. Continue watching, yang isinya campuran, tanpa logo. Kartu menampilkan tahun di kiri atas untuk baris Plex (kartu di Continue watching tanpa label, appnya kelihatan di hero saat kartu difokus),
   badge kanan atas (sisa waktu, "Next", atau durasi), dan progress bar oranye untuk Plex, merah untuk
   YouTube, putih untuk aplikasi lain.
+- Tahan OK di tile aplikasi untuk membuka menunya: Move (khusus baris Your apps), App info, dan
+  Uninstall (hanya untuk app yang bisa dihapus; app sistem tidak). Move menandai tile dengan ring
+  kuning dan panah di namanya, kiri/kanan menggeser posisinya, lalu OK atau Back menyimpan. Urutan
+  disimpan di TV (bukan di `config.xml`) dan dipakai juga oleh grid Apps. App baru menyusul di
+  belakang, urut abjad. Uninstall membuka konfirmasi bawaan sistem.
 - Navigasi: atas dari Your apps ke stage, atas dari stage ke tab aktif, bawah dari top bar ke stage,
   bawah dari stage ke kartu terakhir (atau aplikasi pertama).
 

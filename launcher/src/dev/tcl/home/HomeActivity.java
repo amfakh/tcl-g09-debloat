@@ -1,17 +1,20 @@
 package dev.tcl.home;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.database.ContentObserver;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.media.tv.TvContract;
 import android.media.tv.TvView;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -55,6 +58,7 @@ public class HomeActivity extends Activity {
     private static final int YOUTUBE = Color.rgb(255, 0, 51);
     private static final int LIVE_RED = Color.rgb(232, 69, 60);
     private static final int GRID_COLUMNS = 6;
+    private static final int MOVE_RING = Color.rgb(0xff, 0xe5, 0x99);
     private static final String PLEX_PKG = "com.plexapp.android";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -97,6 +101,10 @@ public class HomeActivity extends Activity {
     private LinearLayout rowsBottom;
     private LinearLayout appRow;
     private View appSection;
+    // The app tile being moved along the row (held OK on it), or null.
+    private View movingTile;
+    // Set when OK or Back ended a move, so its key-up does not also open the app.
+    private boolean swallowKeyUp;
     private boolean rowsExpanded = true;
     private ScrollView rowsScroll;
     private View homePane;
@@ -260,9 +268,12 @@ public class HomeActivity extends Activity {
         }
     }
 
-    /** Frees the tuner and stops the clock while another app is on screen. */
+    /** Saves a tile move in progress, frees the tuner and stops the clock while another app is on screen. */
     @Override
     protected void onPause() {
+        if (movingTile != null) {
+            finishMove();
+        }
         handler.removeCallbacks(tick);
         handler.removeCallbacks(reloadTvRows);
         getContentResolver().unregisterContentObserver(tvRowsChanged);
@@ -573,14 +584,35 @@ public class HomeActivity extends Activity {
     // ---- Keys -----------------------------------------------------------------------------------
 
     /**
-     * Vertical moves between the bands, in the order top bar, stage, rows. Plain geometric focus search
-     * misses the small stage and the top bar from cards far to the right.
+     * Moving an app tile while one is held, and vertical moves between the bands, in the order top bar,
+     * stage, rows. Plain geometric focus search misses the small stage and the top bar from cards far
+     * to the right.
      *
      * @param event the key event
      * @return true when handled here
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        int code = event.getKeyCode();
+        boolean ok = code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
+            || code == KeyEvent.KEYCODE_BACK;
+        if (movingTile != null) {
+            // Moving a tile: Left and Right move it, a fresh OK or Back ends the move, every other key
+            // (and the held OK that started it) is swallowed.
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    moveTile(code == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
+                } else if (ok && event.getRepeatCount() == 0) {
+                    finishMove();
+                    swallowKeyUp = true;
+                }
+            }
+            return true;
+        }
+        if (swallowKeyUp && ok && event.getAction() == KeyEvent.ACTION_UP) {
+            swallowKeyUp = false;
+            return true;
+        }
         if (event.getAction() == KeyEvent.ACTION_DOWN && !showingApps) {
             View f = getCurrentFocus();
             int key = event.getKeyCode();
@@ -1056,8 +1088,8 @@ public class HomeActivity extends Activity {
     // ---- Apps -----------------------------------------------------------------------------------
 
     /**
-     * Fills the app row and the Apps grid: dock_apps in their order, then the other TV apps A to Z,
-     * minus hidden_apps.
+     * Fills the app row and the Apps grid: the order saved by moving tiles (or dock_apps until a tile
+     * was ever moved), then the other TV apps A to Z, minus hidden_apps.
      */
     private void loadApps() {
         PackageManager pm = getPackageManager();
@@ -1070,7 +1102,9 @@ public class HomeActivity extends Activity {
         hidden.add(getPackageName());
 
         List<ResolveInfo> ordered = new ArrayList<>();
-        for (String pkg : getResources().getStringArray(R.array.dock_apps)) {
+        String saved = getSharedPreferences("apps", MODE_PRIVATE).getString("order", null);
+        String[] first = saved != null ? saved.split("\n") : getResources().getStringArray(R.array.dock_apps);
+        for (String pkg : first) {
             ResolveInfo ri = byPkg.remove(pkg);
             if (ri != null && !hidden.contains(pkg)) {
                 ordered.add(ri);
@@ -1083,7 +1117,7 @@ public class HomeActivity extends Activity {
 
         appRow.removeAllViews();
         for (ResolveInfo ri : ordered) {
-            appRow.addView(tile(pm, ri));
+            appRow.addView(tile(pm, ri, true));
         }
         appsGrid.removeAllViews();
         LinearLayout line = null;
@@ -1095,7 +1129,7 @@ public class HomeActivity extends Activity {
                 lineLp.bottomMargin = px(28);
                 appsGrid.addView(line, lineLp);
             }
-            line.addView(tile(pm, ordered.get(n)));
+            line.addView(tile(pm, ordered.get(n), false));
         }
     }
 
@@ -1104,9 +1138,10 @@ public class HomeActivity extends Activity {
      *
      * @param pm package manager for labels and artwork
      * @param ri the app's launcher activity
+     * @param movable whether the held-OK menu offers moving it along its row (the Your apps row)
      * @return the focusable tile
      */
-    private View tile(PackageManager pm, ResolveInfo ri) {
+    private View tile(PackageManager pm, ResolveInfo ri, boolean movable) {
         String pkg = ri.activityInfo.packageName;
         LinearLayout cell = column();
         cell.setFocusable(true);
@@ -1135,6 +1170,7 @@ public class HomeActivity extends Activity {
 
         TextView name = text(19, MUTED, false);
         name.setText(ri.loadLabel(pm));
+        name.setTag(ri.loadLabel(pm).toString());
         name.setSingleLine(true);
         name.setPadding(px(6), px(10), 0, 0);
         cell.addView(name, new LinearLayout.LayoutParams(px(240), -2));
@@ -1156,7 +1192,99 @@ public class HomeActivity extends Activity {
                 start(launch);
             }
         });
+        cell.setOnLongClickListener(v -> {
+            showTileMenu(v, ri, movable);
+            return true;
+        });
         return cell;
+    }
+
+    /**
+     * The menu for a held app tile: Move (Your apps row only), App info, and Uninstall for apps that
+     * can be removed. Uninstall opens the system's own confirmation.
+     *
+     * @param cell the held tile
+     * @param ri the app's launcher activity
+     * @param movable whether the tile can be moved along its row
+     */
+    private void showTileMenu(View cell, ResolveInfo ri, boolean movable) {
+        String pkg = ri.activityInfo.packageName;
+        ApplicationInfo ai = ri.activityInfo.applicationInfo;
+        boolean removable = (ai.flags & ApplicationInfo.FLAG_SYSTEM) == 0
+            || (ai.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0;
+        List<String> labels = new ArrayList<>();
+        List<Runnable> actions = new ArrayList<>();
+        if (movable) {
+            labels.add(getString(R.string.tile_move));
+            actions.add(() -> {
+                movingTile = cell;
+                paintMoving(cell, true);
+            });
+        }
+        labels.add(getString(R.string.tile_info));
+        actions.add(() -> start(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", pkg, null))));
+        if (removable) {
+            labels.add(getString(R.string.tile_uninstall));
+            actions.add(() -> start(new Intent(Intent.ACTION_DELETE, Uri.fromParts("package", pkg, null))));
+        }
+        new AlertDialog.Builder(this)
+            .setTitle(ri.loadLabel(getPackageManager()))
+            .setItems(labels.toArray(new String[0]), (d, which) -> actions.get(which).run())
+            .show();
+    }
+
+    /**
+     * Marks the tile being moved: a yellow ring and arrows around its name.
+     *
+     * @param cell a tile made by tile()
+     * @param moving whether it is being moved
+     */
+    private void paintMoving(View cell, boolean moving) {
+        LinearLayout c = (LinearLayout) cell;
+        GradientDrawable ring = (GradientDrawable) c.getChildAt(0).getForeground();
+        ring.setStroke(px(moving ? 6 : 4), moving ? MOVE_RING : TEXT);
+        TextView name = (TextView) c.getChildAt(1);
+        name.setText(moving ? "◀  " + name.getTag() + "  ▶" : (String) name.getTag());
+    }
+
+    /**
+     * Swaps the tile being moved with its neighbor. The neighbor moves rather than the tile, so the
+     * tile keeps focus.
+     *
+     * @param step -1 for left, 1 for right
+     */
+    private void moveTile(int step) {
+        int i = appRow.indexOfChild(movingTile);
+        int j = i + step;
+        if (j < 0 || j >= appRow.getChildCount()) {
+            return;
+        }
+        View other = appRow.getChildAt(j);
+        appRow.removeView(other);
+        appRow.addView(other, i);
+        movingTile.post(() -> {
+            Rect r = new Rect();
+            movingTile.getDrawingRect(r);
+            movingTile.requestRectangleOnScreen(r);
+        });
+    }
+
+    /** Ends a move: saves the row's order, rebuilds the row and the Apps grid in it, keeps focus. */
+    private void finishMove() {
+        StringBuilder order = new StringBuilder();
+        for (int i = 0; i < appRow.getChildCount(); i++) {
+            order.append(appRow.getChildAt(i).getTag()).append('\n');
+        }
+        getSharedPreferences("apps", MODE_PRIVATE).edit().putString("order", order.toString().trim()).apply();
+        Object pkg = movingTile.getTag();
+        paintMoving(movingTile, false);
+        movingTile = null;
+        loadApps();
+        View again = appRow.findViewWithTag(pkg);
+        if (again != null) {
+            again.requestFocus();
+        }
     }
 
     // ---- Top bar --------------------------------------------------------------------------------
