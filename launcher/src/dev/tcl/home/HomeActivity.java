@@ -85,6 +85,13 @@ public class HomeActivity extends Activity {
     private List<TvRows.Item> picks = Collections.emptyList();
 
     private TextView clock;
+    private Icon weatherIcon;
+    private TextView weatherText;
+    private TextView aqiPill;
+    private View weatherLine;
+    private TextView rainText;
+    private Weather weather;
+    private long weatherTriedAt;
     private ImageView avatarPhoto;
     private LinearLayout rowsTop;
     private LinearLayout rowsBottom;
@@ -121,7 +128,19 @@ public class HomeActivity extends Activity {
     private final Runnable tick = new Runnable() {
         @Override
         public void run() {
-            clock.setText(DateFormat.format("HH:mm", System.currentTimeMillis()) + "   |   " + getString(R.string.tab_home));
+            clock.setText(DateFormat.format("HH:mm", System.currentTimeMillis()));
+            long now = System.currentTimeMillis();
+            if (weather.stale() && now - weatherTriedAt > Weather.RETRY_MS) {
+                weatherTriedAt = now;
+                background.execute(() -> {
+                    try {
+                        weather.refresh();
+                        handler.post(HomeActivity.this::showWeather);
+                    } catch (Exception e) {
+                        // Offline: keep the last reading and try again after RETRY_MS.
+                    }
+                });
+            }
             handler.postDelayed(this, CLOCK_TICK_MS);
         }
     };
@@ -136,6 +155,7 @@ public class HomeActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         images = new Images(this);
+        weather = new Weather(this);
         plex = new Plex(this);
         youtubeRows = getResources().getStringArray(R.array.youtube_rows);
         FrameLayout root = new FrameLayout(this);
@@ -1143,7 +1163,7 @@ public class HomeActivity extends Activity {
 
     /**
      * The top bar from the design: profile, a pill with Search, Home and Apps, a pill with ambient mode
-     * and Settings, and the clock on the right.
+     * and Settings, and the clock with the weather under it on the right.
      *
      * @return the bar
      */
@@ -1173,8 +1193,39 @@ public class HomeActivity extends Activity {
         bar.addView(tools, toolsLp);
 
         bar.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
-        clock = text(40, Color.argb(200, 241, 243, 244), false);
-        bar.addView(clock);
+        // The clock, and under it the sky, temperature, chance of rain and air quality.
+        int clockColor = Color.argb(220, 241, 243, 244);
+        LinearLayout corner = column();
+        corner.setGravity(Gravity.END);
+        clock = text(56, clockColor, false);
+        clock.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams clockLp = new LinearLayout.LayoutParams(-2, -2);
+        clockLp.gravity = Gravity.END;
+        corner.addView(clock, clockLp);
+        LinearLayout line = new LinearLayout(this);
+        line.setGravity(Gravity.CENTER_VERTICAL);
+        weatherLine = line;
+        weatherIcon = new Icon(this, Icon.SUN);
+        weatherIcon.setColor(clockColor);
+        line.addView(weatherIcon, new LinearLayout.LayoutParams(px(32), px(32)));
+        weatherText = text(26, clockColor, false);
+        weatherText.setPadding(px(8), 0, px(20), 0);
+        line.addView(weatherText);
+        Icon drop = new Icon(this, Icon.DROP);
+        drop.setColor(clockColor);
+        line.addView(drop, new LinearLayout.LayoutParams(px(26), px(26)));
+        rainText = text(26, clockColor, false);
+        rainText.setPadding(px(6), 0, px(20), 0);
+        line.addView(rainText);
+        aqiPill = text(20, Color.rgb(23, 24, 27), true);
+        aqiPill.setPadding(px(12), px(3), px(12), px(3));
+        line.addView(aqiPill);
+        LinearLayout.LayoutParams lineLp = new LinearLayout.LayoutParams(-2, -2);
+        lineLp.topMargin = px(6);
+        lineLp.gravity = Gravity.END;
+        corner.addView(line, lineLp);
+        bar.addView(corner);
+        showWeather();
         markTabs();
         return bar;
     }
@@ -1208,6 +1259,38 @@ public class HomeActivity extends Activity {
         if (thumb != null && !thumb.isEmpty()) {
             images.load(thumb, avatarPhoto, px(80));
         }
+    }
+
+    /**
+     * Shows the last weather reading under the clock (sky, temperature, chance of rain, and the air
+     * quality as a pill tinted by its category), or nothing before the first reading.
+     */
+    private void showWeather() {
+        weatherLine.setVisibility(weather.known() ? View.VISIBLE : View.GONE);
+        if (!weather.known()) {
+            return;
+        }
+        int aqi = weather.aqi();
+        aqiPill.setVisibility(aqi < 0 ? View.GONE : View.VISIBLE);
+        if (aqi >= 0) {
+            // The US AQI categories (good, moderate, unhealthy for sensitive groups, unhealthy, very
+            // unhealthy, hazardous) in soft tints of their usual hues, with dark text.
+            int color = aqi <= 50 ? Color.rgb(0xd9, 0xea, 0xd3) : aqi <= 100 ? Color.rgb(0xff, 0xf2, 0xcc)
+                : aqi <= 150 ? Color.rgb(0xfc, 0xe5, 0xcd) : aqi <= 200 ? Color.rgb(0xf4, 0xcc, 0xcc)
+                : aqi <= 300 ? Color.rgb(0xd9, 0xd2, 0xe9) : Color.rgb(0xe6, 0xb8, 0xaf);
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(color);
+            bg.setCornerRadius(px(20));
+            aqiPill.setBackground(bg);
+            aqiPill.setText("AQI " + aqi);
+        }
+        rainText.setText(weather.rainChance() + "%");
+        int sky = weather.sky();
+        weatherIcon.setKind(sky == Weather.CLEAR ? (weather.day() ? Icon.SUN : Icon.MOON)
+            : sky == Weather.PARTLY ? (weather.day() ? Icon.PARTLY : Icon.PARTLY_NIGHT) : sky == Weather.CLOUD ? Icon.CLOUD
+            : sky == Weather.FOG ? Icon.FOG : sky == Weather.RAIN ? Icon.RAIN : Icon.STORM);
+        weatherIcon.setVisibility(View.VISIBLE);
+        weatherText.setText(weather.tempC() + "°");
     }
 
     /**

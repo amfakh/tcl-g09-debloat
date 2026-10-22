@@ -57,4 +57,9 @@
     <!-- Plex Home user whose On Deck fills Continue watching on this TV, by position in the account's
          Plex Home list (user #2; #3 is for the other TV). It must be a user without a PIN. -->
     <integer name="plex_home_user">2</integer>
+
+    <!-- Weather next to the clock, from Open-Meteo (no account or key). City-level coordinates, two
+         decimals, so they do not point at one house: Tangerang Selatan. -->
+    <string name="weather_latitude" translatable="false">-6.29</string>
+    <string name="weather_longitude" translatable="false">106.72</string>
 </resources>

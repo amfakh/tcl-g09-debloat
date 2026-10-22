@@ -214,9 +214,18 @@ Ubah tampilan dan isi lewat `launcher/res/values/config.xml`, lalu jalankan `too
 | `plex_enabled` | Baris dari API Plex: On Deck di Continue watching, Recently added, Movies in your library |
 | `plex_recommendations` | Nama channel Plex di TvProvider untuk baris dan tiga pilihan di samping LIVE |
 | `plex_home_user` | User Plex Home untuk Continue watching, posisi di daftar Plex Home (2 di TV ini). Harus user tanpa PIN |
+| `weather_latitude`, `weather_longitude` | Lokasi cuaca dan kualitas udara di samping jam, koordinat tingkat kota (dua desimal) |
 
 Top bar seperti desain: tombol profil, pill Search / Home / Apps, pill ambient (screensaver,
-sekarang Aerial Views) dan Settings, lalu jam "HH:mm | Home". Tombol profil memakai foto user Plex
+sekarang Aerial Views) dan Settings, lalu di kanan jam besar, dan di bawahnya rata kanan: ikon cuaca, suhu, peluang hujan,
+dan kualitas udara. Semuanya diambil dari Open-Meteo (tanpa akun atau key, yang dikirim cuma
+koordinat di config). Peluang hujan itu angka untuk 15 menit saat ini. AQI pakai skala US AQI, dan
+pill-nya diwarnai pastel sesuai kategorinya (hijau, kuning, oranye, merah, ungu, merah bata) dengan
+teks gelap. Kalau cuma data kualitas udara yang gagal, pill AQI disembunyikan. Datanya dibaca ulang
+tiap 30 menit atau 5 menit setelah gagal, dan bacaan terakhir disimpan jadi langsung tampil saat
+Home dibuka. Sebelum bacaan pertama, baris cuacanya belum muncul. Ikonnya: matahari atau bulan
+(cerah, ikut siang/malam), cerah berawan (matahari atau bulan di balik awan), berawan, kabut, hujan,
+dan petir. Tombol profil memakai foto user Plex
 di `plex_home_user` (huruf `profile_initial` sebelum fotonya kebaca) dan membuka pemilih profil
 Google TV. Foto akun Google tidak bisa dibaca app pihak ketiga. Search membuka pencarian Google TV
 dalam mode suara. Apps membuka grid kartu semua aplikasi di tengah layar (6 kolom, urutan sama dengan baris
