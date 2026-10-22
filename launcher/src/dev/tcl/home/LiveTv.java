@@ -10,12 +10,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Plays the antenna tuner in a TvView behind Home and remembers the channel it last played.
- * TCL's own "last played" setting does not follow Live TV, so this keeps its own record.
+ * Plays the antenna tuner in a TvView behind Home, continuing with the channel last watched, here or in
+ * Live TV. TCL's own "last played" setting does not follow Live TV and Live TV's own record is private,
+ * so this keeps one record by channel number: written on every tune here, and by HomeRedirectService
+ * from Live TV's channel banner.
  */
 final class LiveTv {
     private static final String PREFS = "live_tv";
-    private static final String KEY_LAST = "last_channel";
+    private static final String KEY_LAST = "last_number";
 
     private final TvView view;
     private final String inputId;
@@ -39,7 +41,7 @@ final class LiveTv {
     }
 
     /**
-     * Tunes to the last channel this launcher played, or the first channel the first time.
+     * Tunes to the channel last watched, here or in Live TV, or the first channel the first time.
      *
      * @return false when no tuner channel is readable
      */
@@ -50,8 +52,7 @@ final class LiveTv {
         if (ids.isEmpty()) {
             return false;
         }
-        long last = prefs.getLong(KEY_LAST, -1);
-        index = Math.max(0, ids.indexOf(last));
+        index = Math.max(0, numbers.indexOf(prefs.getString(KEY_LAST, "")));
         tune();
         return true;
     }
@@ -95,11 +96,23 @@ final class LiveTv {
         return index >= 0 && index < ids.size() ? ids.get(index) : -1;
     }
 
-    /** Tunes the TvView to the current channel and records it as the last one played. */
+    /**
+     * Records a channel as the last one watched.
+     *
+     * @param context any context of this app
+     * @param number the channel's display number, such as "21"
+     */
+    static void remember(Context context, String number) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        if (!number.equals(prefs.getString(KEY_LAST, null))) {
+            prefs.edit().putString(KEY_LAST, number).apply();
+        }
+    }
+
+    /** Tunes the TvView to the current channel and records it as the last one watched. */
     private void tune() {
-        long id = ids.get(index);
-        view.tune(inputId, TvContract.buildChannelUri(id));
-        prefs.edit().putLong(KEY_LAST, id).apply();
+        view.tune(inputId, TvContract.buildChannelUri(ids.get(index)));
+        remember(context, numbers.get(index));
     }
 
     /**

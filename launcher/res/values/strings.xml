@@ -16,7 +16,7 @@
     <string name="live_source">Live TV · Antenna</string>
     <string name="row_recently_added">Recently added</string>
     <string name="row_movies">Movies in your library</string>
-    <string name="redirect_description">Opens TCL Home when the Google TV home screen appears.</string>
+    <string name="redirect_description">Opens TCL Home when the Google TV home screen appears, and notes the channel Live TV shows so Home plays the same one.</string>
     <string name="no_tuner">No antenna channels found. Scan channels in Live TV first.</string>
     <string name="tile_move">Move</string>
     <string name="tile_info">App info</string>

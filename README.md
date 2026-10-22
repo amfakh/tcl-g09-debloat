@@ -235,6 +235,10 @@ Isi Home mengikuti desain MagicPath:
 - Hero di atas baris. Default-nya stage LIVE: siaran antena full-screen di belakang, nama channel,
   nomor channel, dan petunjuk tombol. Fokus awal ada di pill LIVE, dan CH+/CH− mengganti channel.
   OK di LIVE membuka Live TV full-screen di channel yang sama.
+- Channel di LIVE ikut channel yang terakhir ditonton, baik di Home maupun di Live TV. Ganti channel
+  di Live TV, lalu tekan Home, dan siaran di Home lanjut di channel itu. Sebaliknya, OK di LIVE dan
+  tile TV membuka Live TV di channel yang sedang diputar Home. Live TV yang dibuka lewat jalan lain
+  (misalnya tombol input di remote) tetap mulai dari catatannya sendiri, lalu Home yang ikut.
 - Di kanan LIVE ada tiga titik: tiga item pertama "Recommendations from Plex" (atau Recently added
   kalau baris itu kosong). Panah kanan pindah ke titik itu, siaran berhenti, dan hero menampilkan
   gambar item itu full-screen, logo app dan nama baris asalnya,
@@ -282,7 +286,9 @@ prioritas HOME 2, setupwraith 1, dan aplikasi pihak ketiga selalu 0. Selain itu 
 Home yang tersimpan, jadi `cmd package set-home-activity` dan `cmd role add-role-holder` menjawab
 sukses tanpa mengubah apa pun. Karena itu TCL Home memakai service aksesibilitas
 (`HomeRedirectService`, cara yang sama dengan at4k): setiap kali HomeActivity Google TV muncul, TCL
-Home dibuka di atasnya. Service ini hanya membaca perpindahan window. Dia tidak memfilter tombol,
+Home dibuka di atasnya. Service ini cuma menerima event dari dua app, Google TV dan Live TV. Dari Live
+TV dia membaca nomor di banner channel (`com.tcl.tv:id/tvCurChannelNum`) dan menyimpannya sebagai
+channel terakhir. Dia tidak memfilter tombol,
 karena filter tombol di keluarga G09 membuat volume tidak bisa ditahan. Layar Google TV lain
 seperti pemilih profil tetap bisa dibuka. Saat boot, service tersambung setelah Google TV tampil,
 jadi dalam lima menit pertama setelah boot service langsung membuka TCL Home.
@@ -317,6 +323,8 @@ Dicek lagi 23 Oktober 2026, setelah hero dan stage dibuat:
 | Recommendations from Plex | Gambar terisi dari server Plex |
 | Avatar | Foto user Plex #2 |
 | Baris YouTube setelah YouTube ditutup | Dibaca ulang otomatis begitu YouTube menulis ulang barisnya (cek dengan log sementara) |
+| Channel dari Live TV ke Home | Live TV pindah ke 20, Home lalu memutar CH 20 (sebelumnya 21) |
+| Channel dari Home ke Live TV | Home di 21, tile TV dan OK di LIVE membuka Live TV di 21; Live TV yang dibuka dari ikon biasa tetap di catatannya sendiri |
 
 Screenshot TCL Home kosong (0 byte) selama stage LIVE tampil: selama `TvView` memutar siaran,
 seluruh layar dianggap konten terproteksi. Pindah fokus ke titik pick atau ke kartu, siaran berhenti,
@@ -365,13 +373,17 @@ Catatan untuk tahap berikutnya:
 - Siaran antena bisa diputar di dalam app pihak ketiga: `TvView` di probe yang disetel ke
   `com.tcl.tvinput/.TunerInputService/HW2` mendapat `onVideoAvailable`, dan Live TV bawaan tetap bisa
   memakai tuner setelah probe ditutup. Gambarnya tidak bisa di-screencap karena konten terproteksi.
-- Channel terakhir yang ditonton tidak tersedia dengan andal untuk launcher. Setelan sistem
-  `last_play_channel_infos.EN_TCL_DVBT` bisa dibaca, tapi nilainya tidak ikut berubah saat Live TV
-  pindah channel (tetap `10019958` saat Live TV memutar `10039423`) dan tidak cocok dengan channel
-  mana pun yang kebaca. `persist.sys.livetvLatestInput` hanya menyimpan input terakhir (tuner).
-  Riwayat tontonan Android (`WatchedPrograms`) khusus app sistem. Jadi launcher sebaiknya menyimpan
-  sendiri channel yang terakhir diputar di `TvView`-nya, dan membuka Live TV full-screen di channel
-  yang sama.
+- Channel terakhir Live TV tidak bisa dibaca langsung oleh launcher. Live TV (`com.tcl.tv`) jalan
+  dengan uid sistem dan menyimpan channel terakhirnya di penyimpanan privat. Ganti channel di Live TV
+  tidak mengubah setelan global/system/secure atau property apa pun.
+  `last_play_channel_infos.EN_TCL_DVBT` tidak ikut berubah, dan `persist.sys.livetvLatestInput`
+  hanya menyimpan input terakhir. Tabel `watched_program` di TvProvider mencatat setiap tune
+  (dari Live TV maupun launcher, ditulis oleh `com.tcl.tvinput`), tapi barisnya baru lengkap saat
+  channel ditinggal, dan tabel itu dijaga izin `ACCESS_WATCHED_PROGRAMS` (signature|privileged):
+  shell bisa membacanya, app biasa tidak, dan `pm grant` ditolak. Yang bisa dibaca adalah banner
+  channel Live TV lewat aksesibilitas (`tvCurChannelNum`, `tvCurChannelName`), yang muncul setiap
+  Live TV dibuka atau ganti channel. Sebaliknya, Live TV menuruti
+  `ACTION_VIEW content://android.media.tv/channel/<id>`, juga saat task-nya sudah terbuka.
 - Isi Watch Next per jenis (`tools/tvprobe.sh` mencatat `watch_next_types`): Viu 9 CONTINUE + 7
   NEXT, Disney+ Hotstar 8 CONTINUE + 1 NEXT, Vidio 1 + 1, semuanya dengan posisi tonton. Jellyfin
   1 NEW tanpa posisi. TCL browser 30 NEW tanpa posisi (artikel dan promo, bukan tontonan). VLC 4

@@ -60,6 +60,7 @@ public class HomeActivity extends Activity {
     private static final int GRID_COLUMNS = 6;
     private static final int MOVE_RING = Color.rgb(0xff, 0xe5, 0x99);
     private static final String PLEX_PKG = "com.plexapp.android";
+    private static final String LIVE_TV_PKG = "com.tcl.tv";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService background = Executors.newSingleThreadExecutor();
@@ -552,7 +553,10 @@ public class HomeActivity extends Activity {
         }
     }
 
-    /** Opens the antenna channel on screen full screen in the TV's Live TV app. */
+    /**
+     * Opens Live TV full screen on the channel Home plays. Live TV opened any other way starts on its
+     * own last channel, which only Home follows (see HomeRedirectService).
+     */
     private void openLiveTv() {
         long id = live != null ? live.channelId() : -1;
         if (id >= 0) {
@@ -563,7 +567,7 @@ public class HomeActivity extends Activity {
                 // No app answers the channel URI: open Live TV as it is.
             }
         }
-        Intent launch = getPackageManager().getLeanbackLaunchIntentForPackage("com.tcl.tv");
+        Intent launch = getPackageManager().getLeanbackLaunchIntentForPackage(LIVE_TV_PKG);
         if (launch != null) {
             start(launch);
         }
@@ -1194,6 +1198,10 @@ public class HomeActivity extends Activity {
             }
         });
         cell.setOnClickListener(v -> {
+            if (LIVE_TV_PKG.equals(pkg)) {
+                openLiveTv();
+                return;
+            }
             Intent launch = pm.getLeanbackLaunchIntentForPackage(pkg);
             if (launch != null) {
                 start(launch);

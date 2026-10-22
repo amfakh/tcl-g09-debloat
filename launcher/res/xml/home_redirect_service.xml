@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Window changes only: no key filtering (it breaks volume repeat on TCL G09), no window content. -->
+<!-- No key filtering (it breaks volume repeat on TCL G09). Events from two apps only: Google TV, whose
+     home screen is redirected, and Live TV, whose channel banner is read for the last channel watched. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:packageNames="com.google.android.apps.tv.launcherx,com.tcl.tv"
     android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds"
     android:notificationTimeout="0"
-    android:canRetrieveWindowContent="false"
+    android:canRetrieveWindowContent="true"
     android:description="@string/redirect_description" />
