@@ -245,17 +245,36 @@ app di TV, bukan di `config.xml`.
 **Top bar.** Kiri ke kanan: foto user Plex (huruf `profile_initial` sebelum fotonya kebaca), yang
 membuka pemilih profil Google TV; pill Search / Home / Apps; pill ambient (screensaver, sekarang
 Aerial Views) dan Settings. Di kanan ada jam besar, dan di bawahnya rata kanan: ikon cuaca, suhu,
-peluang hujan, dan pill AQI. Search membuka pencarian suara Google TV. Gradasi gelap di belakang top
+peluang hujan, dan pill AQI. Seperti di Google TV, tab Home dan Apps berganti begitu difokus, tanpa
+OK. Search membuka pencarian suara Google TV saat OK ditekan. Di Google TV, Search juga tab yang
+berganti saat difokus, tapi halamannya ada di dalam launcher Google TV sendiri dan tidak bisa dipanggil
+app lain. Kalau Search di sini dibuka saat difokus, overlay suara akan muncul setiap fokus lewat.
+
+Warna dan logika top bar mengikuti Google TV (diukur dari screenshot launcher bawaan): tab yang
+difokus berisi biru keabuan muda `#CFDFED` dengan teks hampir hitam, tombol ikon yang difokus berisi
+lingkaran `#E4F3FF` dengan namanya muncul di bawah ("Search", "Screensaver", "Settings"), tab yang
+sedang tampil tapi tidak difokus berisi abu `#373E42`, tombol ikon yang diam punya lingkaran samar
+`#313234`, dan teks di pill yang tidak sedang difokus meredup ke `#ADB0B3`. Isian fokus tidak
+membesar, supaya tetap di dalam pill. Gradasi gelap di belakang top
 bar menjaga jam tetap kebaca di atas siaran atau gambar yang terang.
 
 **Hero.** Default-nya stage LIVE: siaran antena full-screen di belakang, nama dan nomor channel, dan
 petunjuk tombol. Fokus awal ada di pill LIVE, CH+/CH− mengganti channel, dan OK membuka Live TV
 full-screen di channel yang sama. Di kanan LIVE ada tiga titik untuk tiga item pertama
 "Recommendations from Plex" (atau Recently added kalau baris itu kosong). Panah kanan pindah ke titik
-itu: siaran berhenti, dan hero menampilkan gambar item full-screen, logo app dan nama baris asalnya,
-judul, meta, dan deskripsi dua baris. Panah kiri kembali ke LIVE. Fokus di kartu mana pun juga
-mengganti hero dengan item kartu itu, dan siaran berhenti selama fokus ada di baris konten, jadi tidak
-ada suara di belakang.
+itu: hero menampilkan gambar item full-screen, logo app dan nama baris asalnya, judul, meta, dan
+deskripsi dua baris. Panah kiri kembali ke LIVE. Fokus di kartu mana pun juga mengganti hero dengan
+item kartu itu. Selama hero menampilkan item, siaran tetap jalan di belakang, suaranya juga, jadi saat
+kembali ke LIVE siarannya langsung ada tanpa memuat channel lagi. Tuner baru dilepas saat
+TCL Home tidak tampil (aplikasi lain dibuka).
+
+**Animasi.** Lapisan gelap berisi gambar hero fade masuk di atas siaran saat pindah ke item, dan fade
+keluar saat kembali ke LIVE. Gambar hero berganti dengan crossfade (dua `ImageView` bergantian), dan
+teks hero fade sambil naik sedikit setiap item berganti. Gambar kartu yang baru selesai diunduh fade
+masuk; yang sudah ada di cache langsung tampil. Tab Home dan Apps berganti dengan crossfade. Kartu dan tile
+membesar saat difokus. Warna pill di top bar (Search, Home, Apps, ambient, Settings) berganti dengan
+transisi, juga saat fokus naik dari kartu ke top bar. Durasinya 200–320 ms, dikali skala animasi sistem (di TV ini sudah disetel
+ke 1; bawaannya 0,5).
 
 **Baris.** Urutannya: Your apps, Continue watching, Recommendations from Plex, YouTube Recommended for
 you, Recently added, YouTube Subscriptions, Movies in your library. Tampilan default cuma hero, baris
@@ -298,9 +317,9 @@ tombol input di remote) mulai dari catatannya sendiri, lalu Home yang ikut. Cata
 sebagai nomor channel: ditulis setiap Home ganti channel, dan oleh `HomeRedirectService` dari banner
 channel Live TV.
 
-Screenshot TCL Home kosong (0 byte) selama stage LIVE tampil: selama `TvView` memutar siaran, seluruh
-layar dianggap konten terproteksi. Pindah fokus ke titik pick atau ke kartu, siaran berhenti, dan
-screenshot bisa diambil lagi.
+Screenshot TCL Home kosong (0 byte) selama TCL Home tampil: `TvView` terus memutar siaran, dan selama
+itu seluruh layar dianggap konten terproteksi. Untuk melihat tata letak lewat screenshot, pasang build
+sementara dengan `show_live_tv` bernilai `false`.
 
 ### Plex
 
@@ -388,7 +407,9 @@ Lewat `dumpsys`, struktur UI dari `uiautomator`, dan screenshot (22–23 Oktober
 | Reboot | TCL Home tampil sekitar 30 detik setelah perintah reboot |
 | Standby lalu nyala lagi | TCL Home, siaran lanjut di channel terakhir |
 | Fokus awal dan CH+/CH− | Pill LIVE dengan siaran jalan; `1 TVRI Nasional` → `2 TVRI DKI HD` → kembali |
-| Stage | Kanan dari LIVE ke titik pick (siaran berhenti, hero berisi gambar dan deskripsi), kiri kembali ke LIVE |
+| Stage | Kanan dari LIVE ke titik pick (hero berisi gambar dan deskripsi), kiri kembali ke LIVE |
+| Siaran di belakang | Sesi TV input sama persis di LIVE, titik pick, kartu, dan kembali ke LIVE (tidak tune ulang) |
+| Kemulusan (gfxinfo, jalur tombol yang sama) | Tanpa animasi: 113 frame, 49% janky, median 23 ms. Dengan animasi: 264 frame, 26% janky, median 31 ms, p90 sama 46 ms |
 | Baris | Ketujuh baris ada sesuai urutan; tampilan default hero + Your apps + intipan Continue watching |
 | Channel Live TV → Home | Live TV pindah ke 20, Home lalu memutar CH 20 |
 | Channel Home → Live TV | Home di 21, tile TV dan OK di LIVE membuka Live TV di 21 |

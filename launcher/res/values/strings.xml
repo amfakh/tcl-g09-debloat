@@ -18,6 +18,9 @@
     <string name="row_movies">Movies in your library</string>
     <string name="redirect_description">Opens TCL Home when the Google TV home screen appears, and notes the channel Live TV shows so Home plays the same one, and starts a Plex item a Home card opened once Plex is ready.</string>
     <string name="no_tuner">No antenna channels found. Scan channels in Live TV first.</string>
+    <string name="tip_search">Search</string>
+    <string name="tip_screensaver">Screensaver</string>
+    <string name="tip_settings">Settings</string>
     <string name="tile_move">Move</string>
     <string name="tile_info">App info</string>
     <string name="tile_uninstall">Uninstall</string>

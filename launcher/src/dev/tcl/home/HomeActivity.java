@@ -1,6 +1,8 @@
 package dev.tcl.home;
 
 import android.app.Activity;
+import android.animation.ArgbEvaluator;
+import android.animation.ValueAnimator;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
@@ -25,6 +27,7 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
@@ -71,7 +74,11 @@ public class HomeActivity extends Activity {
     private Plex plex;
     private LiveTv live;
     private TvView tvView;
+    // Whether the hero shows live TV (image layer faded out).
     private boolean liveOn;
+    // Whether the tuner plays in tvView. It keeps playing, with sound, while the hero shows something
+    // else, so live TV is back at once; it is released only when Home leaves the screen.
+    private boolean tuned;
 
     // Row data; the Plex lists keep the last copy so the next Home shows them at once.
     private List<TvRows.Item> watchNext = new ArrayList<>();
@@ -82,7 +89,11 @@ public class HomeActivity extends Activity {
     private List<TvRows.Item> plexMovies = new ArrayList<>();
     private String[] youtubeRows;
 
+    // Over live TV: a dark layer holding two artwork views that take turns, for crossfades.
+    private FrameLayout heroLayer;
     private ImageView heroArt;
+    private ImageView heroArtBack;
+    private View heroTexts;
     private ImageView heroLogo;
     private TextView heroSource;
     private TextView heroTitle;
@@ -96,6 +107,10 @@ public class HomeActivity extends Activity {
     private Icon weatherIcon;
     private TextView weatherText;
     private TextView aqiPill;
+    // Repaint each top-bar pill button for the current focus.
+    private final List<Runnable> pillPainters = new ArrayList<>();
+    // The name shown under a focused tool button.
+    private TextView tip;
     private View weatherLine;
     private TextView rainText;
     private Weather weather;
@@ -182,10 +197,17 @@ public class HomeActivity extends Activity {
             root.addView(tvView, new FrameLayout.LayoutParams(-1, -1));
             live = new LiveTv(this, tvView, getString(R.string.live_tv_input));
         }
+        heroLayer = new FrameLayout(this);
+        heroLayer.setBackgroundColor(BG);
         heroArt = new ImageView(this);
-        heroArt.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        heroArt.setVisibility(View.GONE);
-        root.addView(heroArt, new FrameLayout.LayoutParams(-1, -1));
+        heroArtBack = new ImageView(this);
+        for (ImageView art : new ImageView[] {heroArtBack, heroArt}) {
+            art.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            art.setAlpha(0f);
+            heroLayer.addView(art, new FrameLayout.LayoutParams(-1, -1));
+        }
+        heroLayer.setAlpha(live != null ? 0f : 1f);
+        root.addView(heroLayer, new FrameLayout.LayoutParams(-1, -1));
 
         View scrimSide = new View(this);
         scrimSide.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
@@ -260,11 +282,19 @@ public class HomeActivity extends Activity {
         appsPane.addView(appsGrid, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL));
         panes.addView(appsPane, new FrameLayout.LayoutParams(-1, -1));
 
+        tip = text(22, TEXT, false);
+        tip.setAlpha(0f);
+        root.addView(tip, new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START));
         setContentView(root);
         // Only the apps show under the hero until focus moves into the content rows below them.
         setRowsExpanded(false);
-        root.getViewTreeObserver().addOnGlobalFocusChangeListener((oldFocus, newFocus) -> setRowsExpanded(
-            newFocus != null && (isInside(newFocus, rowsTop) || isInside(newFocus, rowsBottom))));
+        root.getViewTreeObserver().addOnGlobalFocusChangeListener((oldFocus, newFocus) -> {
+            setRowsExpanded(newFocus != null && (isInside(newFocus, rowsTop) || isInside(newFocus, rowsBottom)));
+            // Pill colors depend on where focus is, also outside the pill (dimmed text).
+            for (Runnable paint : pillPainters) {
+                paint.run();
+            }
+        });
     }
 
     /** Back to the LIVE stage with focus on it, then refreshes the apps and every row. */
@@ -296,7 +326,12 @@ public class HomeActivity extends Activity {
         handler.removeCallbacks(retryPlexRows);
         resumed = false;
         getContentResolver().unregisterContentObserver(tvRowsChanged);
-        setLive(false);
+        if (tuned) {
+            // Live TV and other apps need the tuner.
+            live.stop();
+            tuned = false;
+        }
+        liveOn = false;
         super.onPause();
     }
 
@@ -357,6 +392,7 @@ public class HomeActivity extends Activity {
         row.setClipChildren(false);
 
         LinearLayout texts = new LinearLayout(this);
+        heroTexts = texts;
         texts.setOrientation(LinearLayout.VERTICAL);
         LinearLayout source = new LinearLayout(this);
         source.setGravity(Gravity.CENTER_VERTICAL);
@@ -467,6 +503,7 @@ public class HomeActivity extends Activity {
     /** The LIVE stage: the antenna channel full screen, its name in the hero. */
     private void showLive() {
         setLive(true);
+        CharSequence before = heroTitle.getText();
         heroLogo.setImageDrawable(null);
         GradientDrawable dot = new GradientDrawable();
         dot.setColor(LIVE_RED);
@@ -481,6 +518,49 @@ public class HomeActivity extends Activity {
             heroMeta.setText("");
         }
         heroDesc.setText(R.string.live_hint);
+        reveal(before);
+    }
+
+    /**
+     * Fades the hero's text in and lifts it into place, when it now shows something else.
+     *
+     * @param titleBefore the hero title before the change
+     */
+    private void reveal(CharSequence titleBefore) {
+        if (titleBefore.toString().contentEquals(heroTitle.getText())) {
+            return;
+        }
+        heroTexts.setAlpha(0f);
+        heroTexts.setTranslationY(px(18));
+        heroTexts.animate().alpha(1f).translationY(0f).setDuration(260)
+            .setInterpolator(new DecelerateInterpolator()).start();
+    }
+
+    /**
+     * Crossfades the hero artwork to an image: the back view loads it and fades in over the front one,
+     * then they swap roles. Requests overtaken by a newer one are dropped by Images.
+     *
+     * @param uri the image, or null for none (the dark layer only)
+     */
+    private void showHeroImage(String uri) {
+        if (uri != null && uri.equals(heroArt.getTag()) && heroArt.getAlpha() > 0f) {
+            return;
+        }
+        ImageView next = heroArtBack;
+        next.animate().cancel();
+        next.setAlpha(0f);
+        next.setImageDrawable(null);
+        if (uri == null) {
+            next.setTag(null);
+            heroArt.animate().alpha(0f).setDuration(200).start();
+            return;
+        }
+        next.bringToFront();
+        images.load(uri, next, 1280, () -> {
+            next.animate().alpha(1f).setDuration(320).setInterpolator(new DecelerateInterpolator()).start();
+            heroArtBack = heroArt;
+            heroArt = next;
+        });
     }
 
     /**
@@ -495,14 +575,12 @@ public class HomeActivity extends Activity {
             return;
         }
         setLive(false);
+        CharSequence before = heroTitle.getText();
         String uri = item.imageUri;
         if (uri != null && uri.contains("/photo/:/transcode")) {
             uri = uri.replace("width=320&height=180", "width=1280&height=720");
         }
-        if (uri == null || !uri.equals(heroArt.getTag())) {
-            heroArt.setImageDrawable(null);
-            images.load(uri, heroArt, 1280);
-        }
+        showHeroImage(uri);
         // The app's logo says where it comes from, so neither line repeats the app's name.
         heroLogo.setBackground(logoShape());
         heroLogo.setImageDrawable(appIcon(item.packageName));
@@ -523,26 +601,30 @@ public class HomeActivity extends Activity {
         }
         heroMeta.setText(TextUtils.join("   ·   ", meta));
         heroDesc.setText(item.description != null ? item.description : "");
+        reveal(before);
     }
 
     /**
-     * Turns the live picture on or off. Off stops the tuner, so no sound plays behind an item.
+     * Shows live TV in the hero, or covers it with the artwork layer. The tuner starts on first use
+     * and keeps playing, with its sound, while the layer covers it; onPause releases it.
      *
      * @param on whether live TV shows
      */
     private void setLive(boolean on) {
+        if (live == null) {
+            return;
+        }
+        if (!tuned) {
+            tuned = live.start();
+        }
         if (on && !liveOn) {
-            heroArt.setVisibility(View.GONE);
-            if (live != null) {
-                tvView.setVisibility(View.VISIBLE);
-                live.start();
-            }
-        } else if (!on && liveOn) {
-            if (live != null) {
-                live.stop();
-                tvView.setVisibility(View.INVISIBLE);
-            }
-            heroArt.setVisibility(View.VISIBLE);
+            heroLayer.animate().alpha(0f).setDuration(320).start();
+        } else if (!on && (liveOn || heroLayer.getAlpha() < 1f)) {
+            // Over live TV: the dark layer fades in, and the item's artwork fades in on top of it.
+            heroArt.animate().cancel();
+            heroArt.setAlpha(0f);
+            heroArt.setTag(null);
+            heroLayer.animate().alpha(1f).setDuration(320).start();
         }
         liveOn = on;
     }
@@ -1498,7 +1580,8 @@ public class HomeActivity extends Activity {
     // ---- Top bar --------------------------------------------------------------------------------
 
     /**
-     * The top bar from the design: profile, a pill with Search, Home and Apps, a pill with ambient mode
+     * The top bar from the design: profile, a pill with Search, Home and Apps (the tabs switch as soon
+     * as they are focused; Search opens on OK), a pill with ambient mode
      * and Settings, and the clock with the weather under it on the right.
      *
      * @return the bar
@@ -1511,9 +1594,21 @@ public class HomeActivity extends Activity {
         bar.addView(avatar(), new LinearLayout.LayoutParams(px(80), px(80)));
 
         LinearLayout nav = pill();
-        nav.addView(pillButton(null, Icon.SEARCH, v -> start(new Intent("android.search.action.GLOBAL_SEARCH"))));
-        homeTab = pillButton(getString(R.string.tab_home), -1, v -> showApps(false));
-        appsTab = pillButton(getString(R.string.tab_apps), -1, v -> showApps(true));
+        nav.addView(pillButton(null, Icon.SEARCH, getString(R.string.tip_search), false,
+            v -> start(new Intent("android.search.action.GLOBAL_SEARCH"))));
+        homeTab = pillButton(getString(R.string.tab_home), -1, null, false, v -> showApps(false));
+        appsTab = pillButton(getString(R.string.tab_apps), -1, null, false, v -> showApps(true));
+        // Like Google TV, focusing a tab switches to it; OK is not needed.
+        homeTab.setOnFocusChangeListener((v, has) -> {
+            if (has && showingApps) {
+                showApps(false);
+            }
+        });
+        appsTab.setOnFocusChangeListener((v, has) -> {
+            if (has && !showingApps) {
+                showApps(true);
+            }
+        });
         nav.addView(homeTab);
         nav.addView(appsTab);
         LinearLayout.LayoutParams navLp = new LinearLayout.LayoutParams(-2, -2);
@@ -1521,9 +1616,12 @@ public class HomeActivity extends Activity {
         bar.addView(nav, navLp);
 
         LinearLayout tools = pill();
-        tools.addView(pillButton(null, Icon.PICTURE,
+        tools.addView(pillButton(null, Icon.PICTURE, getString(R.string.tip_screensaver), true,
             v -> start(new Intent().setClassName("com.android.systemui", "com.android.systemui.Somnambulator"))));
-        tools.addView(pillButton(null, Icon.GEAR, v -> start(new Intent(android.provider.Settings.ACTION_SETTINGS))));
+        LinearLayout.LayoutParams gearLp = new LinearLayout.LayoutParams(-2, px(80));
+        gearLp.leftMargin = px(8);
+        tools.addView(pillButton(null, Icon.GEAR, getString(R.string.tip_settings), true,
+            v -> start(new Intent(android.provider.Settings.ACTION_SETTINGS))), gearLp);
         LinearLayout.LayoutParams toolsLp = new LinearLayout.LayoutParams(-2, -2);
         toolsLp.leftMargin = px(28);
         bar.addView(tools, toolsLp);
@@ -1637,22 +1735,25 @@ public class HomeActivity extends Activity {
         pill.setGravity(Gravity.CENTER_VERTICAL);
         pill.setPadding(px(8), px(8), px(8), px(8));
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.argb(217, 42, 44, 49));
+        bg.setColor(Color.argb(235, 0x28, 0x2A, 0x2C));
         bg.setCornerRadius(px(48));
         pill.setBackground(bg);
         return pill;
     }
 
     /**
-     * One button inside a pill: a label or an icon. Focus turns it light with dark content; the tab on
-     * screen keeps a soft highlight.
+     * One button inside a pill: a label (Home, Apps) or an icon (Search, ambient mode, Settings).
+     * Colors follow Google TV's own top bar (see paintPillButton); an icon button shows its name
+     * under it while focused.
      *
      * @param label text, or null for an icon button
      * @param icon Icon kind when label is null
+     * @param tip the name shown under an icon button while focused, or null
+     * @param circle whether the button keeps a faint circle when idle (Google TV's tool buttons)
      * @param onClick what OK does
      * @return the button
      */
-    private View pillButton(String label, int icon, View.OnClickListener onClick) {
+    private View pillButton(String label, int icon, String tip, boolean circle, View.OnClickListener onClick) {
         FrameLayout b = new FrameLayout(this);
         b.setFocusable(true);
         GradientDrawable bg = new GradientDrawable();
@@ -1666,45 +1767,117 @@ public class HomeActivity extends Activity {
             t.setPadding(px(40), 0, px(40), 0);
             b.addView(t, new FrameLayout.LayoutParams(-2, -1));
         } else {
-            i.setColor(TEXT);
             b.addView(i, new FrameLayout.LayoutParams(px(34), px(34), Gravity.CENTER));
         }
         b.setTag(R.id.tab_selected, false);
-        b.setOnFocusChangeListener((v, has) -> paintPillButton(b, bg, t, i));
+        pillPainters.add(() -> paintPillButton(b, bg, t, i, circle));
+        if (tip != null) {
+            b.setOnFocusChangeListener((v, has) -> showTip(has ? v : null, tip));
+        }
         b.setOnClickListener(onClick);
         b.setMinimumWidth(px(80));
         b.setLayoutParams(new LinearLayout.LayoutParams(-2, px(80)));
-        paintPillButton(b, bg, t, i);
+        paintPillButton(b, bg, t, i, circle);
         return b;
     }
 
     /**
-     * Colors a pill button for its focus and selected state.
+     * Colors a pill button the way Google TV's top bar does: a pale fill and dark content while
+     * focused (blue-grey for the tabs, near white for the round tool buttons), a grey fill for the tab
+     * on screen, a faint circle behind idle tool buttons, and dimmed text in a pill the focus is not
+     * in. Colors change with a short transition, starting from the colors shown now.
      *
      * @param b the button
      * @param bg its background
      * @param t its label, or null
      * @param i its icon, or null
+     * @param circle whether it is a round tool button
      */
-    private void paintPillButton(View b, GradientDrawable bg, TextView t, Icon i) {
+    private void paintPillButton(View b, GradientDrawable bg, TextView t, Icon i, boolean circle) {
         boolean focused = b.isFocused();
         boolean selected = Boolean.TRUE.equals(b.getTag(R.id.tab_selected));
-        bg.setColor(focused ? Color.rgb(232, 234, 237) : selected ? Color.argb(56, 232, 234, 237) : Color.TRANSPARENT);
-        int fg = focused ? Color.rgb(23, 24, 27) : TEXT;
+        boolean groupFocused = isInside(getCurrentFocus(), (View) b.getParent());
+        int toBg = focused ? (circle ? Color.rgb(0xE4, 0xF3, 0xFF) : Color.rgb(0xCF, 0xDF, 0xED))
+            : selected ? Color.rgb(0x37, 0x3E, 0x42) : circle ? Color.rgb(0x31, 0x32, 0x34) : Color.TRANSPARENT;
+        int toFg = focused ? Color.rgb(0x0E, 0x0E, 0x0F) : groupFocused || b.getParent() == null ? TEXT
+            : Color.rgb(0xAD, 0xB0, 0xB3);
+        // {shown bg, shown fg, target bg, target fg}: a transition starts from what is on screen, also
+        // halfway through another one, and none starts when the target is unchanged.
+        int[] c = (int[]) b.getTag(R.id.pill_colors);
+        if (c == null) {
+            b.setTag(R.id.pill_colors, new int[] {toBg, toFg, toBg, toFg});
+            paintPillColors(bg, t, i, toBg, toFg);
+            return;
+        }
+        if (c[2] == toBg && c[3] == toFg) {
+            return;
+        }
+        c[2] = toBg;
+        c[3] = toFg;
+        ValueAnimator running = (ValueAnimator) b.getTag(R.id.pill_anim);
+        if (running != null) {
+            running.cancel();
+        }
+        int fromBg = c[0];
+        int fromFg = c[1];
+        ArgbEvaluator argb = new ArgbEvaluator();
+        ValueAnimator anim = ValueAnimator.ofFloat(0f, 1f).setDuration(180);
+        anim.setInterpolator(new DecelerateInterpolator());
+        anim.addUpdateListener(a -> {
+            float f = a.getAnimatedFraction();
+            c[0] = (int) argb.evaluate(f, fromBg, toBg);
+            c[1] = (int) argb.evaluate(f, fromFg, toFg);
+            paintPillColors(bg, t, i, c[0], c[1]);
+        });
+        b.setTag(R.id.pill_anim, anim);
+        anim.start();
+    }
+
+    /**
+     * @param bg a pill button's background
+     * @param t its label, or null
+     * @param i its icon, or null
+     * @param bgColor background color
+     * @param fgColor label or icon color
+     */
+    private void paintPillColors(GradientDrawable bg, TextView t, Icon i, int bgColor, int fgColor) {
+        bg.setColor(bgColor);
         if (t != null) {
-            t.setTextColor(fg);
+            t.setTextColor(fgColor);
         }
         if (i != null) {
-            i.setColor(fg);
+            i.setColor(fgColor);
         }
+    }
+
+    /**
+     * Shows a tool button's name centered under it, or hides it.
+     *
+     * @param button the focused button, or null to hide the name
+     * @param name the button's name
+     */
+    private void showTip(View button, String name) {
+        tip.animate().cancel();
+        if (button == null) {
+            tip.animate().alpha(0f).setDuration(120).start();
+            return;
+        }
+        tip.setText(name);
+        tip.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        int[] at = new int[2];
+        button.getLocationInWindow(at);
+        tip.setTranslationX(at[0] + button.getWidth() / 2f - tip.getMeasuredWidth() / 2f);
+        tip.setTranslationY(at[1] + button.getHeight() + px(12));
+        tip.animate().alpha(1f).setDuration(160).start();
     }
 
     /** Gives the Home or Apps button the selected highlight. */
     private void markTabs() {
         homeTab.setTag(R.id.tab_selected, !showingApps);
         appsTab.setTag(R.id.tab_selected, showingApps);
-        homeTab.getOnFocusChangeListener().onFocusChange(homeTab, homeTab.isFocused());
-        appsTab.getOnFocusChangeListener().onFocusChange(appsTab, appsTab.isFocused());
+        for (Runnable paint : pillPainters) {
+            paint.run();
+        }
     }
 
     /**
@@ -1715,12 +1888,20 @@ public class HomeActivity extends Activity {
      */
     private void showApps(boolean apps) {
         showingApps = apps;
-        homePane.setVisibility(apps ? View.GONE : View.VISIBLE);
-        appsPane.setVisibility(apps ? View.VISIBLE : View.GONE);
+        View in = apps ? appsPane : homePane;
+        View out = apps ? homePane : appsPane;
+        in.animate().cancel();
+        out.animate().cancel();
+        if (in.getVisibility() != View.VISIBLE) {
+            in.setAlpha(0f);
+            in.setVisibility(View.VISIBLE);
+        }
+        in.animate().alpha(1f).setDuration(200).start();
+        out.animate().alpha(0f).setDuration(200).withEndAction(() -> out.setVisibility(View.GONE)).start();
         appsPane.scrollTo(0, 0);
         if (apps) {
             setLive(false);
-            heroArt.setVisibility(View.GONE);
+            showHeroImage(null);
         } else if (stageSlot == 0) {
             showStage(0);
         }

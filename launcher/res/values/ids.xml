@@ -2,4 +2,7 @@
 <resources>
     <!-- View tag key: whether a top-bar tab is the one on screen. -->
     <item name="tab_selected" type="id" />
+    <!-- View tag keys: the colors a top-bar pill shows now, and its running color animation. -->
+    <item name="pill_colors" type="id" />
+    <item name="pill_anim" type="id" />
 </resources>

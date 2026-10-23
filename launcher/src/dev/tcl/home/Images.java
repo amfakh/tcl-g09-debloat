@@ -36,6 +36,8 @@ final class Images {
     private final Handler main = new Handler(Looper.getMainLooper());
     // Views waiting per image being fetched, so rebuilt rows do not fetch the same image twice. Main thread only.
     private final Map<String, List<ImageView>> waiting = new HashMap<>();
+    // What to run once a view's image is set, instead of fading it in. Main thread only.
+    private final Map<ImageView, Runnable> onShownFor = new HashMap<>();
     // An eighth of the heap holds every card of the Home rows, so rebuilding them fetches nothing again.
     private final LruCache<String, Bitmap> cache = new LruCache<String, Bitmap>((int) (Runtime.getRuntime().maxMemory() / 8)) {
         @Override
@@ -71,7 +73,26 @@ final class Images {
      * @param width wanted width in pixels
      */
     void load(String uri, ImageView view, int width) {
+        load(uri, view, width, null);
+    }
+
+    /**
+     * Same as {@link #load(String, ImageView, int)}. Without onShown, an image that had to be fetched
+     * fades in; one from the cache shows at once. With onShown, nothing fades: onShown runs once the
+     * image is in the view, unless the view was given another uri meanwhile.
+     *
+     * @param uri image location, or null for none
+     * @param view the target
+     * @param width wanted width in pixels
+     * @param onShown run on the main thread once the image is set, or null
+     */
+    void load(String uri, ImageView view, int width, Runnable onShown) {
         view.setTag(uri);
+        if (onShown != null) {
+            onShownFor.put(view, onShown);
+        } else {
+            onShownFor.remove(view);
+        }
         if (uri == null) {
             return;
         }
@@ -79,6 +100,10 @@ final class Images {
         Bitmap hit = cache.get(key);
         if (hit != null) {
             view.setImageBitmap(hit);
+            Runnable shown = onShownFor.remove(view);
+            if (shown != null) {
+                shown.run();
+            }
             return;
         }
         List<ImageView> views = waiting.get(key);
@@ -100,6 +125,13 @@ final class Images {
                 for (ImageView v : targets) {
                     if (uri.equals(v.getTag())) {
                         v.setImageBitmap(bmp);
+                        Runnable shown = onShownFor.remove(v);
+                        if (shown != null) {
+                            shown.run();
+                        } else {
+                            v.setAlpha(0f);
+                            v.animate().alpha(1f).setDuration(200).start();
+                        }
                     }
                 }
             });
