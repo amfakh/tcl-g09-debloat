@@ -28,6 +28,14 @@ final class LiveTv {
     private final List<String> names = new ArrayList<>();
     private int index = -1;
 
+    /** A program from the channel's guide. */
+    static final class Program {
+        String title;
+        String description;
+        long startMs;
+        long endMs;
+    }
+
     /**
      * @param context activity context, used for the TV provider and preferences
      * @param view the TvView that shows the picture
@@ -94,6 +102,31 @@ final class LiveTv {
      */
     long channelId() {
         return index >= 0 && index < ids.size() ? ids.get(index) : -1;
+    }
+
+    /**
+     * Reads the program on air now from the guide. Reads the provider, so call it off the main thread.
+     *
+     * @param context any context of this app
+     * @param channelId provider row id of the channel
+     * @return the program, or null when the guide has none for now
+     */
+    static Program onAir(Context context, long channelId) {
+        long now = System.currentTimeMillis();
+        try (Cursor c = context.getContentResolver().query(TvContract.buildProgramsUriForChannel(channelId, now, now),
+                null, null, null, null)) {
+            if (c == null || !c.moveToFirst()) {
+                return null;
+            }
+            Program p = new Program();
+            p.title = c.getString(c.getColumnIndex(TvContract.Programs.COLUMN_TITLE));
+            p.description = c.getString(c.getColumnIndex(TvContract.Programs.COLUMN_SHORT_DESCRIPTION));
+            p.startMs = c.getLong(c.getColumnIndex(TvContract.Programs.COLUMN_START_TIME_UTC_MILLIS));
+            p.endMs = c.getLong(c.getColumnIndex(TvContract.Programs.COLUMN_END_TIME_UTC_MILLIS));
+            return p.title != null ? p : null;
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /**

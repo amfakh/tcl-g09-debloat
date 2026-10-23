@@ -280,7 +280,10 @@ peluang hujan, dan pill AQI.
 - Gradasi gelap di belakang top bar menjaga jam tetap kebaca di atas siaran atau gambar yang terang.
 
 **Hero.** Hero selalu siaran antena full-screen di belakang, dengan ikon TV dari app Live TV bawaan
-TCL, nama dan nomor channel. Fokus awal ada di tile pertama Your apps (TV), CH+/CH− mengganti channel
+TCL, nama dan nomor channel, lalu acara yang sedang tayang dari EPG siaran: judul, jam mulai–selesai,
+dan deskripsi singkat apa adanya dari stasiunnya (TRANS 7 mengisinya dengan genre seperti
+"INFORMATION MAGAZINE", METRO TV mengosongkannya). EPG dibaca di thread sendiri, terisi kurang dari
+setengah detik setelah ganti channel, dan dibaca lagi begitu acaranya selesai. Fokus awal ada di tile pertama Your apps (TV), CH+/CH− mengganti channel
 selama siaran tampil, dan OK di tile TV membuka Live TV full-screen di channel yang sama. Fokus di
 kartu mana pun mengganti hero dengan item kartu itu: gambar item full-screen, logo app dan nama baris
 asalnya, judul, meta, dan deskripsi dua baris. Begitu fokus kembali ke Your apps, hero kembali ke
@@ -454,6 +457,7 @@ Lewat `dumpsys`, struktur UI dari `uiautomator`, dan screenshot (22–23 Oktober
 | Reboot | TCL Home tampil sekitar 30 detik setelah perintah reboot |
 | Standby lalu nyala lagi | TCL Home, siaran lanjut di channel terakhir |
 | Fokus awal dan CH+/CH− | Tile TV dengan siaran jalan; `RCTI HD` → `MNCTV HD` → kembali |
+| Acara dari EPG | `MAKAN RECEH · 16:00–17:00` di TRANS 7, `METRO HARI INI · 16:00–16:30` di METRO TV, sudah tampil 0,4 detik setelah CH+ |
 | Navigasi | Continue watching → atas ke Your apps (hero kembali ke siaran) → atas ke tab Home → bawah ke tile TV |
 | Siaran di belakang | Sesi TV input sama persis di siaran, kartu, dan kembali ke siaran (tidak tune ulang) |
 | Kemulusan (gfxinfo, jalur tombol yang sama) | Tanpa animasi: 113 frame, 49% janky, median 23 ms. Dengan animasi: 264 frame, 26% janky, median 31 ms, p90 sama 46 ms |

@@ -73,6 +73,10 @@ public class HomeActivity extends Activity {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService background = Executors.newSingleThreadExecutor();
+    // The guide lookup gets its own thread: background can be busy for seconds with Plex requests.
+    private final ExecutorService guide = Executors.newSingleThreadExecutor();
+    // When the program shown in the hero ends, so the clock tick reads the next one; 0 for none.
+    private long programEndMs;
     private Images images;
     private Plex plex;
     private LiveTv live;
@@ -172,6 +176,9 @@ public class HomeActivity extends Activity {
                         // Offline: keep the last reading and try again after RETRY_MS.
                     }
                 });
+            }
+            if (liveOn && programEndMs > 0 && now >= programEndMs) {
+                showOnAir();
             }
             handler.postDelayed(this, CLOCK_TICK_MS);
         }
@@ -458,6 +465,33 @@ public class HomeActivity extends Activity {
         }
         heroDesc.setText("");
         reveal(before);
+        showOnAir();
+    }
+
+    /**
+     * Fills the hero description with the program on air on the live channel, from the guide: title,
+     * start and end time, and its short description. Read off the main thread; dropped when the hero
+     * moved on before it arrived.
+     */
+    private void showOnAir() {
+        programEndMs = 0;
+        long channel = live != null ? live.channelId() : -1;
+        if (channel < 0) {
+            return;
+        }
+        guide.execute(() -> {
+            LiveTv.Program p = LiveTv.onAir(this, channel);
+            handler.post(() -> {
+                if (p == null || !liveOn || live.channelId() != channel) {
+                    return;
+                }
+                programEndMs = p.endMs;
+                String text = p.title + "   ·   " + DateFormat.format("HH:mm", p.startMs) + "–"
+                    + DateFormat.format("HH:mm", p.endMs);
+                String about = p.description != null ? p.description.trim() : "";
+                heroDesc.setText(about.isEmpty() ? text : text + "\n" + about);
+            });
+        });
     }
 
     /**
