@@ -283,7 +283,9 @@ peluang hujan, dan pill AQI.
 TCL, nama dan nomor channel, lalu acara yang sedang tayang dari EPG siaran: judul, jam mulai–selesai,
 dan deskripsi singkat apa adanya dari stasiunnya (TRANS 7 mengisinya dengan genre seperti
 "INFORMATION MAGAZINE", METRO TV mengosongkannya). EPG dibaca di thread sendiri, terisi kurang dari
-setengah detik setelah ganti channel, dan dibaca lagi begitu acaranya selesai. Fokus awal ada di tile pertama Your apps (TV), CH+/CH− mengganti channel
+setengah detik setelah ganti channel, dan dibaca lagi begitu acaranya selesai. Selama Home tampil,
+launcher memantau tabel program di TvProvider, jadi EPG yang baru ditulis tuner setelah tune langsung
+muncul (setengah detik setelah tulisan terakhirnya). Fokus awal ada di tile pertama Your apps (TV), CH+/CH− mengganti channel
 selama siaran tampil, dan OK di tile TV membuka Live TV full-screen di channel yang sama. Fokus di
 kartu mana pun mengganti hero dengan item kartu itu: gambar item full-screen, logo app dan nama baris
 asalnya, judul, meta, dan deskripsi dua baris. Begitu fokus kembali ke Your apps, hero kembali ke

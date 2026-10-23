@@ -55,6 +55,7 @@ import java.util.concurrent.Executors;
 public class HomeActivity extends Activity {
     private static final long CLOCK_TICK_MS = 15_000;
     private static final long TV_ROWS_SETTLE_MS = 2_000;
+    private static final long GUIDE_SETTLE_MS = 500;
     private static final long PLEX_RETRY_MS = 15_000;
     // How much of the rows above and below the focused row shows, in 1080p design pixels.
     private static final int ROW_PEEK = 44;
@@ -158,6 +159,25 @@ public class HomeActivity extends Activity {
         public void onChange(boolean selfChange) {
             handler.removeCallbacks(reloadTvRows);
             handler.postDelayed(reloadTvRows, TV_ROWS_SETTLE_MS);
+        }
+    };
+
+    private final Runnable reloadGuide = () -> {
+        if (liveOn) {
+            showOnAir();
+        }
+    };
+    // The tuner writes the guide as it receives it, often after the tune: show it as soon as it lands.
+    private final ContentObserver guideChanged = new ContentObserver(handler) {
+        /**
+         * Schedules a fresh read of the program on air, pushed back by every further change.
+         *
+         * @param selfChange unused
+         */
+        @Override
+        public void onChange(boolean selfChange) {
+            handler.removeCallbacks(reloadGuide);
+            handler.postDelayed(reloadGuide, GUIDE_SETTLE_MS);
         }
     };
 
@@ -322,6 +342,7 @@ public class HomeActivity extends Activity {
         // Apps rewrite their rows a few seconds after they close (YouTube does): show the new copy.
         getContentResolver().registerContentObserver(TvContract.PreviewPrograms.CONTENT_URI, true, tvRowsChanged);
         getContentResolver().registerContentObserver(TvContract.WatchNextPrograms.CONTENT_URI, true, tvRowsChanged);
+        getContentResolver().registerContentObserver(TvContract.Programs.CONTENT_URI, true, guideChanged);
         if (!showingApps) {
             showLive();
             if (first != null) {
@@ -341,6 +362,8 @@ public class HomeActivity extends Activity {
         handler.removeCallbacks(retryPlexRows);
         resumed = false;
         getContentResolver().unregisterContentObserver(tvRowsChanged);
+        getContentResolver().unregisterContentObserver(guideChanged);
+        handler.removeCallbacks(reloadGuide);
         if (tuned) {
             // Live TV and other apps need the tuner.
             live.stop();
