@@ -283,17 +283,27 @@ diambil dari server Plex dalam satu request per server (`/library/metadata/k1,k2
 itu (atau `adb shell am start -n dev.tcl.home/.PlexLoginActivity`): TV menampilkan kode, masukkan
 di plex.tv/link dari HP. Token akun, token user, dan alamat server yang berhasil disimpan di
 penyimpanan privat aplikasi. Watch Next tampil dulu, On Deck menyusul sekitar 1–3 detik kemudian, dan
-On Deck terakhir ditampilkan langsung saat Home dibuka lagi. Kartu Plex membuka app Plex dengan link
-yang sama dengan yang Plex tulis sendiri (`plex://server://…/library/metadata/…`).
+On Deck terakhir ditampilkan langsung saat Home dibuka lagi. Kartu Plex langsung memutar itemnya dari
+posisi terakhir ditonton. Launcher membuka halaman item lewat rute app Plex sendiri,
+`plex://libraries/<machineId server>/movie/x/<ratingKey>` (jalan untuk film maupun episode; segmen
+`movie` dan slug `x` tidak dicek), lalu `HomeRedirectService` mengirim
+`…/movie/x/<ratingKey>?autoplay=1&offset=<detik>` begitu Plex menampilkan tombol Resume, Watch, atau
+Play (tanda Plex sudah tersambung ke server). Link autoplay langsung tidak dipakai sendirian karena
+Plex yang harus start dulu mencoba memutar sebelum tersambung ke server dan menampilkan "Can't Reach
+Server". `offset` dibaca Plex dalam detik; tanpa `offset` Plex memutar dari awal walaupun ada posisi
+resume. Link dari baris "Recommendations from Plex" (Plex menulisnya dalam bentuk lama
+`plex://server://…/library/metadata/…?viewOffset=<ms>`) diubah dengan cara yang sama.
 
 Cara jadi Home: Google TV tetap enabled dan tetap jadi Home sistem. Di build ini Google TV punya
 prioritas HOME 2, setupwraith 1, dan aplikasi pihak ketiga selalu 0. Selain itu tidak ada preferensi
 Home yang tersimpan, jadi `cmd package set-home-activity` dan `cmd role add-role-holder` menjawab
 sukses tanpa mengubah apa pun. Karena itu TCL Home memakai service aksesibilitas
 (`HomeRedirectService`, cara yang sama dengan at4k): setiap kali HomeActivity Google TV muncul, TCL
-Home dibuka di atasnya. Service ini cuma menerima event dari dua app, Google TV dan Live TV. Dari Live
-TV dia membaca nomor di banner channel (`com.tcl.tv:id/tvCurChannelNum`) dan menyimpannya sebagai
-channel terakhir. Dia tidak memfilter tombol,
+Home dibuka di atasnya. Service ini cuma menerima event dari tiga app: Google TV, Live TV, dan Plex. Dari
+Live TV dia membaca nomor di banner channel (`com.tcl.tv:id/tvCurChannelNum`) dan menyimpannya
+sebagai channel terakhir. Dari Plex dia hanya menunggu tombol Resume/Watch/Play muncul setelah kartu
+Plex dibuka, lalu mengirim link autoplay; dia tidak mengklik apa pun. Plex app React Native, dan
+tombolnya baru terlihat oleh service dengan `flagIncludeNotImportantViews`. Dia tidak memfilter tombol,
 karena filter tombol di keluarga G09 membuat volume tidak bisa ditahan. Layar Google TV lain
 seperti pemilih profil tetap bisa dibuka. Saat boot, service tersambung setelah Google TV tampil,
 jadi dalam lima menit pertama setelah boot service langsung membuka TCL Home.
@@ -313,7 +323,7 @@ Sudah dicek di TV (22 Oktober 2026), lewat `dumpsys` dan struktur UI dari `uiaut
 | Login Plex | Kode tampil, setelah dimasukkan di plex.tv/link layar menutup sendiri |
 | On Deck Plex | Muncul di Continue watching dengan poster dari VPS, label episode, dan progress bar |
 | Top bar | Profil membuka pemilih profil Google TV, ambient memulai Aerial Views, Settings membuka Settings, Search membuka pencarian suara Google TV, Apps membuka grid, Home kembali ke baris |
-| Kartu Plex | Membuka app Plex, tapi Plex selalu menampilkan "Who's watching?" dulu, dan setelah user dipilih Plex membuka berandanya, bukan item yang dipilih |
+| Kartu Plex | Lihat catatan app Plex di bawah: link lama berakhir di beranda Plex, rute `plex://libraries/…` membuka detail item |
 
 Dicek lagi 23 Oktober 2026, setelah hero dan stage dibuat:
 
@@ -409,6 +419,23 @@ Catatan untuk tahap berikutnya:
   sendiri. User #2: On Deck 18 item di server utama (server kedua menolak koneksi untuk user ini).
   User #3: 2 item. TV ini memakai user #2, user #3 untuk TV lain. Di launcher, user Plex jadi satu
   setelan di `config.xml`, tanpa pemilih user di layar.
+- App Plex untuk TV (versi 2026.20.0, `tv.plex.app.MainActivity`) adalah app React Native; routing
+  link ada di bundle JavaScript (Hermes), bukan di kode Java-nya. Rute yang dikenalinya antara lain
+  `libraries/:serverId/movie/:slug/:key` dan `libraries/:serverId/show/…`. Link lama
+  `plex://server://<id>/com.plexapp.plugins.library/library/metadata/<key>` (yang masih Plex tulis
+  ke TvProvider, dan yang dipakai launcher Dispatch 1.0.175) berakhir di beranda Plex, baik Plex
+  sedang terbuka maupun tidak. `plex://libraries/<id>/movie/x/<key>` membuka detail item dalam
+  semua kasus yang dicoba: Plex mati, Plex di background, dan Plex sedang di detail item lain.
+  Bundle-nya punya `useAutoplayDeeplinkRedirect`: `?autoplay=1` memutar item, `&offset=<detik>`
+  mengatur posisi awal (`viewOffset`, `resume`, dan `t` diabaikan; `offset` dalam milidetik melompat
+  melewati akhir film, dan Plex lalu menandainya sudah ditonton). Klik lewat aksesibilitas
+  (`ACTION_CLICK`) maupun tap sentuh pada tombol Resume tidak memicu apa pun di Plex. Plex Companion
+  (port 32500, `/player/playback/playMedia`) tidak terbuka di TV ini. Sejak "sign in
+  automatically" aktif di Plex, "Who's watching?" tidak muncul lagi.
+- Dispatch (`com.spauldhaliwal.dispatch`) adalah app Flutter. String di `libapp.so` menunjukkan dia
+  membuka item Plex dengan `android_intent_plus` dan link `plex://server://…?viewOffset=`, plus
+  extra miliknya sendiri (`extra_detail_page`, `android.intent.extra.START_PLAYBACK`) yang tidak
+  dibaca app Plex.
 - Log yang ditulis app di `onCreate` tidak pernah muncul di logcat build ini, sedangkan log dari
   callback muncul. Karena itu probe `live` mencatat detail penyetelan di baris callback.
 - `tools/tvprobe.sh` membangun APK probe kecil (`tools/tvprobe/`), memasangnya, memberi izin

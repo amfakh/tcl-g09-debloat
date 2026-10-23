@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- No key filtering (it breaks volume repeat on TCL G09). Events from two apps only: Google TV, whose
-     home screen is redirected, and Live TV, whose channel banner is read for the last channel watched. -->
+<!-- No key filtering (it breaks volume repeat on TCL G09). Events from three apps only: Google TV, whose
+     home screen is redirected; Live TV, whose channel banner is read for the last channel watched; and
+     Plex, which is watched until it is ready to play an item a Home card opened. Plex is a React Native
+     app whose buttons only show to services that include not-important views. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
-    android:packageNames="com.google.android.apps.tv.launcherx,com.tcl.tv"
+    android:packageNames="com.google.android.apps.tv.launcherx,com.tcl.tv,com.plexapp.android"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagReportViewIds"
+    android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews"
     android:notificationTimeout="0"
     android:canRetrieveWindowContent="true"
     android:description="@string/redirect_description" />

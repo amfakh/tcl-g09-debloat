@@ -267,6 +267,7 @@ public class HomeActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        HomeRedirectService.cancelPlexPlay();
         tick.run();
         loadApps();
         loadRows(true);
@@ -1080,8 +1081,9 @@ public class HomeActivity extends Activity {
     }
 
     /**
-     * Opens an item the way its app asked (its intent URI), else just launches the app. The Plex
-     * sign-in card opens the sign-in screen.
+     * Opens an item the way its app asked (its intent URI), else just launches the app. Plex links
+     * open the item's page, and the item then plays from where it was left (see HomeRedirectService).
+     * The Plex sign-in card opens the sign-in screen.
      *
      * @param item the card's item
      */
@@ -1091,8 +1093,15 @@ public class HomeActivity extends Activity {
             return;
         }
         try {
-            if (item.intentUri != null) {
-                startActivity(Intent.parseUri(item.intentUri, Intent.URI_INTENT_SCHEME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            String uri = item.intentUri;
+            String play = PLEX_PKG.equals(item.packageName) ? Plex.appLink(item) : null;
+            if (play != null && !play.equals(item.intentUri)) {
+                // The item's page first; the redirect service plays it once Plex has reached the server.
+                uri = play.substring(0, play.indexOf('?'));
+                HomeRedirectService.playWhenPlexReady(play);
+            }
+            if (uri != null) {
+                startActivity(Intent.parseUri(uri, Intent.URI_INTENT_SCHEME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
                 return;
             }
         } catch (Exception e) {

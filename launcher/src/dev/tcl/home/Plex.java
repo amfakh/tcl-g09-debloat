@@ -28,6 +28,10 @@ import java.util.regex.Pattern;
  * main thread.
  */
 final class Plex {
+    // A Plex item link: the app's own route (plex://libraries/...) or the older form Plex still writes
+    // into its Android TV rows (plex://server://.../library/metadata/...). Groups: server id, ratingKey.
+    private static final Pattern VIEW_OFFSET = Pattern.compile("[?&]viewOffset=(\\d+)");
+    private static final Pattern LINK = Pattern.compile("^plex://(?:server://|libraries/)([^/]+)/.*/(\\d+)(?:\\?.*)?$");
     private static final String PREFS = "plex";
     private static final String KEY_CLIENT = "client_id";
     private static final String KEY_ACCOUNT = "account_token";
@@ -160,6 +164,41 @@ final class Plex {
     }
 
     /**
+     * The link that opens an item's page in the Plex app. Plex's app routes it to the item, also when
+     * it has to start first; the older server:// form opens Plex's home instead. The slug segment is
+     * not checked, and the movie route opens episodes too.
+     *
+     * @param serverId the server's machine identifier
+     * @param ratingKey the item's ratingKey
+     * @return the link
+     */
+    static String appLink(String serverId, String ratingKey) {
+        return "plex://libraries/" + serverId + "/movie/x/" + ratingKey;
+    }
+
+    /**
+     * The link that plays a Plex item right away, from where it was left: its page link with
+     * autoplay=1 and offset in seconds (Plex reads offset as seconds; without it, playback starts at
+     * the beginning even when the item has a resume point).
+     *
+     * @param item a Plex item, from the Plex API or from Plex's rows in the TV provider
+     * @return the link, or the item's own link when it is not a Plex item link
+     */
+    static String appLink(TvRows.Item item) {
+        Matcher m = item.intentUri != null ? LINK.matcher(item.intentUri) : null;
+        if (m == null || !m.matches()) {
+            return item.intentUri;
+        }
+        long offsetMs = item.positionMs;
+        Matcher view = VIEW_OFFSET.matcher(item.intentUri);
+        if (offsetMs <= 0 && view.find()) {
+            // Plex's own rows carry the resume point in their link, in milliseconds.
+            offsetMs = Long.parseLong(view.group(1));
+        }
+        return appLink(m.group(1), m.group(2)) + "?autoplay=1" + (offsetMs >= 1000 ? "&offset=" + offsetMs / 1000 : "");
+    }
+
+    /**
      * Gives Plex app rows read from the TV provider artwork from the server itself: the Plex app serves
      * their pictures from a content provider only the stock launcher may open. Each item's link names
      * its server and ratingKey; one request per server reads them all.
@@ -177,7 +216,6 @@ final class Plex {
             servers = findServers(userToken(homeUser));
             prefs.edit().putString(KEY_SERVERS, servers).apply();
         }
-        Pattern link = Pattern.compile("^plex://server://([^/]+)/.*/library/metadata/(\\d+)");
         for (String line : servers.split("\n")) {
             String[] s = line.split(" ", 3);
             if (s.length < 3) {
@@ -185,7 +223,7 @@ final class Plex {
             }
             Map<String, TvRows.Item> byKey = new HashMap<>();
             for (TvRows.Item item : rows) {
-                Matcher m = item.intentUri != null ? link.matcher(item.intentUri) : null;
+                Matcher m = item.intentUri != null ? LINK.matcher(item.intentUri) : null;
                 if (m != null && m.find() && m.group(1).equals(s[2])) {
                     byKey.put(m.group(2), item);
                 }
@@ -200,7 +238,7 @@ final class Plex {
                 continue;
             }
             for (TvRows.Item f : found) {
-                Matcher m = link.matcher(f.intentUri);
+                Matcher m = LINK.matcher(f.intentUri);
                 TvRows.Item item = m.find() ? byKey.get(m.group(2)) : null;
                 if (item != null && f.imageUri != null) {
                     item.imageUri = f.imageUri;
@@ -346,9 +384,7 @@ final class Plex {
                     item.imageUri = base + "/photo/:/transcode?width=320&height=180&minSize=1&upscale=1&url="
                         + Uri.encode(image) + "&X-Plex-Token=" + token;
                 }
-                // The same link Plex writes into its own Android TV rows.
-                item.intentUri = "plex://server://" + machineId + "/com.plexapp.plugins.library/library/metadata/"
-                    + m.optString("ratingKey") + "?viewOffset=" + offset;
+                item.intentUri = appLink(machineId, m.optString("ratingKey"));
                 out.add(item);
             }
         } catch (org.json.JSONException e) {
