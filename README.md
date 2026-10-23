@@ -1,12 +1,39 @@
-# Debloat TCL Google TV (G09)
+# TCL G09: debloat dan TCL Home
 
-Debloat TV TCL Google TV lewat ADB di Wi-Fi, berdasarkan
-[cleanyourtv](https://github.com/Gathin23/cleanyourtv) (daftar `examples/tcl-g09-google-tv`, firmware
-yang sama persis). Semua aplikasi cuma di-**disable** untuk user 0, tidak ada yang di-uninstall, dan
-`tools/restore.sh` mengembalikan TV ke kondisi sebelum debloat.
+Dua hal untuk TV TCL Google TV (G09), dua-duanya jalan lewat ADB di Wi-Fi dan sudah dicek di TV:
 
-Repo ini juga berisi TCL Home, launcher pengganti Home Google TV dengan siaran antena live, Plex, dan
-YouTube di satu layar (lihat [Launcher (TCL Home)](#launcher-tcl-home)). Keduanya sudah dicek di TV.
+- **Debloat.** Mematikan bloatware dan telemetry TCL, berdasarkan
+  [cleanyourtv](https://github.com/Gathin23/cleanyourtv) (daftar `examples/tcl-g09-google-tv`, firmware
+  yang sama persis). Semua aplikasi cuma di-**disable** untuk user 0, tidak ada yang di-uninstall, dan
+  `tools/restore.sh` mengembalikan TV ke kondisi sebelum debloat.
+- **TCL Home.** Launcher pengganti Home Google TV: siaran antena live di belakang, Plex, YouTube, dan
+  Spotify di satu layar.
+
+## Tampilan
+
+| Google TV bawaan | Setelah debloat |
+|---|---|
+| ![Home Google TV bawaan, dengan tab TCL](docs/screenshots/google-tv-before.jpg) | ![Home Google TV setelah debloat, tab TCL hilang](docs/screenshots/google-tv-debloated.jpg) |
+
+<!-- Foto layar default TCL Home (hero dengan siaran live) masuk di sini: docs/screenshots/tcl-home-live.jpg -->
+
+| TCL Home: kartu difokus | TCL Home: tab Apps |
+|---|---|
+| ![Kartu Plex difokus, hero berisi gambar dan deskripsinya](docs/screenshots/tcl-home-card.jpg) | ![Grid Apps dengan Favorites dan All apps](docs/screenshots/tcl-home-apps.jpg) |
+
+![Menu tile saat OK ditahan](docs/screenshots/tcl-home-tile-menu.jpg)
+
+Siaran antena tidak bisa di-screenshot (lihat [Live TV](#live-tv)), jadi screenshot TCL Home di atas
+diambil dari build dengan `show_live_tv` bernilai `false`. Foto profil di screenshot sengaja diburamkan.
+
+## Daftar isi
+
+- [TV ini](#tv-ini)
+- [Isi repo](#isi-repo)
+- [Persiapan](#persiapan)
+- [Debloat](#debloat)
+- [TCL Home](#tcl-home)
+- [Menutup ADB](#menutup-adb)
 
 ## TV ini
 
@@ -19,26 +46,27 @@ YouTube di satu layar (lihat [Launcher (TCL Home)](#launcher-tcl-home)). Keduany
 | Home bawaan | `com.google.android.apps.tv.launcherx/.home.HomeActivity` |
 | Live TV / HDMI | `com.tcl.tv` (player), `com.tcl.tvinput` (HDMI 3/15/16/17 dan tuner) |
 
-## Isi folder
+## Isi repo
 
 ```
-debloat.txt          daftar paket yang di-disable, dikelompokkan dan diberi komentar
-tools/lib.sh         alamat TV (TV_HOST), koneksi ADB, helper `tv`, validasi daftar paket
-tools/backup.sh      simpan kondisi TV ke backup/<waktu>/
-tools/debloat.sh     backup, lalu disable semua paket di debloat.txt, lalu pasang Private DNS
-tools/restore.sh     kembalikan semuanya ke backup paling awal
-tools/screenshot.sh  tekan tombol remote lalu simpan screenshot ke shots/<nama>.png
-tools/tvprobe.sh     cek data Continue watching, channel, dan siaran antena yang bisa dibaca launcher
-tools/tvprobe/       source APK probe untuk tvprobe.sh
-tools/plex-check.py  cek apa yang bisa diambil launcher dari server Plex (token di plex.local)
+debloat.txt             daftar paket yang di-disable, dikelompokkan dan diberi komentar
+tools/lib.sh            alamat TV (TV_HOST), koneksi ADB, helper `tv`, validasi daftar paket, build_apk
+tools/backup.sh         simpan kondisi TV ke backup/<waktu>/
+tools/debloat.sh        backup, lalu disable semua paket di debloat.txt, lalu pasang Private DNS
+tools/restore.sh        kembalikan semuanya ke backup paling awal
+tools/screenshot.sh     tekan tombol remote lalu simpan screenshot ke shots/<nama>.png
 tools/build-install.sh  build TCL Home, install, jadikan Home, cek di layar
-launcher/            source TCL Home; launcher/res/values/config.xml untuk semua setelan
-plex.local           token Plex, satu baris (git-ignored, jangan dibagikan)
-backup/              hasil backup (jangan di-commit, isinya serial number dan identitas device)
-shots/               screenshot (jangan dishare, ada nama akun dan nama Wi-Fi)
+tools/tvprobe.sh        cek data Continue watching, channel, dan siaran antena yang bisa dibaca launcher
+tools/tvprobe/          source APK probe untuk tvprobe.sh
+tools/plex-check.py     cek apa yang bisa diambil launcher dari server Plex (token di plex.local)
+launcher/               source TCL Home; launcher/res/values/config.xml untuk semua setelan
+docs/screenshots/       gambar untuk README ini
+plex.local              token Plex, satu baris (jangan dibagikan)
+backup/                 hasil backup (isinya serial number dan identitas device)
+shots/                  screenshot kerja (ada nama akun dan nama Wi-Fi)
 ```
 
-`backup/` dan `shots/` sudah masuk `.gitignore`.
+`plex.local`, `backup/`, dan `shots/` masuk `.gitignore`.
 
 ## Persiapan
 
@@ -48,8 +76,12 @@ shots/               screenshot (jangan dishare, ada nama akun dan nama Wi-Fi)
 3. Koneksi pertama memunculkan "Allow USB debugging?" di TV. Centang "Always allow" lalu OK.
 4. Alamat TV default ada di `tools/lib.sh`. Kalau berubah (DHCP), jalankan dengan
    `TV_HOST=<ip-tv> tools/debloat.sh`. Lebih enak lagi kalau IP TV di-reserve di router.
+5. Untuk TCL Home saja: JDK 17 dan Android SDK. `brew install openjdk@17`, `brew install --cask
+   android-commandlinetools`, lalu `sdkmanager "platforms;android-34" "build-tools;34.0.0"`.
 
-## Cara pakai
+## Debloat
+
+### Cara pakai
 
 ```bash
 tools/debloat.sh                 # backup + disable semua isi debloat.txt + Private DNS
@@ -71,20 +103,7 @@ tools/backup.sh                  # backup saja, tanpa mengubah apa pun
 - `screenshot.sh` menerima nama tombol tanpa awalan `KEYCODE_`: `HOME`, `BACK`, `DPAD_DOWN`,
   `DPAD_CENTER`, `TV_INPUT`, `VOICE_ASSIST`.
 
-## Pengaman di debloat.sh
-
-Diambil dari `tools/disable.sh` di cleanyourtv. Tiap pengaman mencegah kerusakan nyata kalau
-`debloat.txt` nanti diedit:
-
-| Pengaman | Kenapa |
-|---|---|
-| Nama paket divalidasi | Tiap nama masuk ke perintah shell di TV. Satu baris aneh, seluruh daftar ditolak |
-| Pemilik Home dilewati | Tanpa launcher, setup wizard Google TV mengambil alih Home dan bisa crash-loop |
-| `setupwraith` dilewati selama dia memiliki Wi-Fi tersimpan | Android menghapus jaringan itu saat setupwraith di-disable, TV putus dari Wi-Fi dan ADB |
-| Paket yang minta `TV_INPUT_HARDWARE` dilewati | Itu biasanya driver HDMI/tuner. Kalau di-disable, input jadi "No Signal" dan baru pulih lewat restore penuh plus cold boot |
-| Satu perintah `pm` per paket | Perintah berantai bisa berhenti diam-diam setelah gagal pertama |
-
-## Apa yang di-disable
+### Yang di-disable
 
 32 paket di `debloat.txt` (30 berubah, 2 memang sudah disabled dari pabrik).
 
@@ -99,7 +118,7 @@ Diambil dari `tools/disable.sh` di cleanyourtv. Tiap pengaman mencegah kerusakan
 
 Update firmware di build ini datang lewat Play Services, jadi `ttvs` aman di-disable.
 
-## Yang sengaja tidak disentuh
+### Yang sengaja tidak disentuh
 
 - Dipakai: Netflix, YouTube, Google TV/Play Movies (`com.google.android.videos`), Chromecast
   (`mediashell`), AirPlay (`com.tcl.airplay2`, `com.amlogic.airplay`), remote di HP
@@ -116,7 +135,20 @@ Update firmware di build ini datang lewat Play Services, jadi `ttvs` aman di-dis
 - `com.tcl.factory.view`: paket factory. Jangan pernah dibuka, bahkan cuma untuk melihat.
 - `com.tcl.android.webview`: WebView yang aktif adalah milik Google, yang TCL tidak terpakai.
 
-## Mengaktifkan lagi satu aplikasi
+### Pengaman di debloat.sh
+
+Diambil dari `tools/disable.sh` di cleanyourtv. Tiap pengaman mencegah kerusakan nyata kalau
+`debloat.txt` nanti diedit:
+
+| Pengaman | Kenapa |
+|---|---|
+| Nama paket divalidasi | Tiap nama masuk ke perintah shell di TV. Satu baris aneh, seluruh daftar ditolak |
+| Pemilik Home dilewati | Tanpa launcher, setup wizard Google TV mengambil alih Home dan bisa crash-loop |
+| `setupwraith` dilewati selama dia memiliki Wi-Fi tersimpan | Android menghapus jaringan itu saat setupwraith di-disable, TV putus dari Wi-Fi dan ADB |
+| Paket yang minta `TV_INPUT_HARDWARE` dilewati | Itu biasanya driver HDMI/tuner. Kalau di-disable, input jadi "No Signal" dan baru pulih lewat restore penuh plus cold boot |
+| Satu perintah `pm` per paket | Perintah berantai bisa berhenti diam-diam setelah gagal pertama |
+
+### Mengaktifkan lagi satu aplikasi
 
 ```bash
 adb connect <ip-tv>:5555
@@ -127,7 +159,7 @@ Lalu jadikan komentar barisnya di `debloat.txt` supaya `debloat.sh` berikutnya t
 
 Tanpa komputer: Settings → Apps → See all apps → Show system apps → pilih aplikasinya → Enable.
 
-## Private DNS (blok iklan)
+### Private DNS (blok iklan)
 
 `debloat.sh` memasang Private DNS ke `dns.adguard-dns.com`. Domain iklan seperti `doubleclick.net`
 di-resolve ke `127.0.0.1`. Ini **tidak** memblok iklan YouTube karena iklannya dikirim dari domain
@@ -142,7 +174,7 @@ adb -s <ip-tv>:5555 shell settings put global private_dns_mode opportunistic
 Atau lewat TV: Settings → Network and Internet → Private DNS → Automatic. `restore.sh` mengembalikan
 nilai aslinya (kosong).
 
-## Hasil pengecekan debloat di TV (22 Oktober 2026)
+### Hasil pengecekan di TV (22 Oktober 2026)
 
 | Fitur | Bukti |
 |---|---|
@@ -165,7 +197,7 @@ nilai aslinya (kosong).
 Belum dicek: tombol mic di remote fisik (tombol yang diinjeksi lewat ADB tidak membuktikan apa-apa
 untuk mic) dan gambar HDMI dilihat langsung dengan mata.
 
-## Catatan dan keanehan
+### Catatan dan keanehan
 
 - Screenshot kosong (0 byte) saat Live TV, HDMI, Netflix, atau video screensaver tampil. Itu
   proteksi konten, bukan kerusakan. `screenshot.sh` lalu mencetak activity yang sedang tampil.
@@ -181,21 +213,11 @@ untuk mic) dan gambar HDMI dilihat langsung dengan mata.
 - `restore.sh` menetapkan launcherx sebagai Home secara eksplisit (`set-home-activity`), bukan
   sekadar karena prioritas.
 
-## Menutup ADB
-
-Port 5555 itu plaintext. TV ini `ro.adb.secure=1`, jadi perangkat lain tetap butuh izin "Allow" di
-layar. Tapi kalau sudah tidak dipakai: Developer options → matikan USB debugging → "Revoke USB
-debugging authorizations" → reboot. Cek dari Mac: `nc -vz <ip-tv> 5555` harus menjawab
-"Connection refused".
-
-ADB dipakai `tools/build-install.sh` untuk memasang TCL Home, jadi biarkan menyala selama launcher
-masih diubah.
-
-## Launcher (TCL Home)
+## TCL Home
 
 `launcher/` berisi TCL Home: Android framework biasa (Java, tanpa AndroidX, tanpa kode native, jadi
 aman untuk `armeabi-v7a`), dibangun langsung dengan tool SDK oleh `build_apk` di `tools/lib.sh`.
-APK-nya sekitar 58 KB. Saat jalan memakai sekitar 125 MB RAM (PSS) di tampilan default, dan sekitar
+APK-nya sekitar 62 KB. Saat jalan memakai sekitar 125 MB RAM (PSS) di tampilan default, dan sekitar
 165 MB setelah semua baris dan gambarnya termuat. Sebagian besar selisihnya adalah bitmap kartu.
 
 Desainnya mengikuti prototipe di MagicPath:
@@ -212,9 +234,6 @@ service aksesibilitas (service lain yang sudah aktif tetap dipertahankan), lalu 
 menekan Home. Kalau yang tampil bukan TCL Home, redirect dimatikan lagi dan script keluar dengan
 error, jadi TV tidak pernah tertinggal tanpa Home.
 
-Butuh JDK 17 dan Android SDK: `brew install openjdk@17`, `brew install --cask
-android-commandlinetools`, lalu `sdkmanager "platforms;android-34" "build-tools;34.0.0"`.
-
 `tools/restore.sh` mengembalikan setelan aksesibilitas ke baseline, jadi redirect mati dan Google TV
 kembali jadi Home. TCL Home tetap terpasang tapi tidak dipakai.
 
@@ -230,34 +249,35 @@ Ubah lewat `launcher/res/values/config.xml`, lalu jalankan `tools/build-install.
 | `dock_apps` | Favorit awal di baris Your apps, sebelum favorit pernah diubah dari remote |
 | `hidden_apps` | Aplikasi yang tidak pernah tampil |
 | `watch_next_excluded` | Aplikasi yang dibuang dari Continue watching (TCL browser, VLC) |
-| `youtube_package`, `youtube_rows` | Channel YouTube di TvProvider yang jadi baris, berurutan |
+| `youtube_package`, `youtube_rows` | Channel YouTube di TvProvider yang jadi baris |
+| `spotify_package`, `spotify_row` | Channel Spotify di TvProvider yang jadi baris Spotify |
 | `stock_home_activity` | Home Google TV yang dialihkan ke TCL Home |
 | `plex_enabled` | Baris dari API Plex: On Deck di Continue watching, Recently added, Movies in your library |
 | `plex_recommendations` | Nama channel Plex di TvProvider untuk baris Recommendations from Plex |
-| `spotify_package`, `spotify_row` | Channel Spotify di TvProvider yang jadi baris Spotify |
 | `plex_home_user` | User Plex Home yang dipakai, posisi di daftar Plex Home (2 di TV ini). Harus user tanpa PIN |
 | `weather_latitude`, `weather_longitude` | Lokasi cuaca dan kualitas udara, koordinat tingkat kota (dua desimal) |
 
-Favorit dan urutannya, channel terakhir, cuaca terakhir, dan login Plex disimpan di penyimpanan privat
-app di TV, bukan di `config.xml`.
+Favorit dan urutannya, kapan tiap app terakhir dibuka, channel terakhir, cuaca terakhir, dan login
+Plex disimpan di penyimpanan privat app di TV, bukan di `config.xml`.
 
-### Tampilan
+### Layar Home
 
 **Top bar.** Kiri ke kanan: foto user Plex (huruf `profile_initial` sebelum fotonya kebaca), yang
 membuka pemilih profil Google TV; pill Search / Home / Apps; pill ambient (screensaver, sekarang
 Aerial Views) dan Settings. Di kanan ada jam besar, dan di bawahnya rata kanan: ikon cuaca, suhu,
-peluang hujan, dan pill AQI. Seperti di Google TV, tab Home dan Apps berganti begitu difokus, tanpa
-OK. Search membuka pencarian suara Google TV saat OK ditekan. Di Google TV, Search juga tab yang
-berganti saat difokus, tapi halamannya ada di dalam launcher Google TV sendiri dan tidak bisa dipanggil
-app lain. Kalau Search di sini dibuka saat difokus, overlay suara akan muncul setiap fokus lewat.
+peluang hujan, dan pill AQI.
 
-Warna dan logika top bar mengikuti Google TV (diukur dari screenshot launcher bawaan): tab yang
-difokus berisi biru keabuan muda `#CFDFED` dengan teks hampir hitam, tombol ikon yang difokus berisi
-lingkaran `#E4F3FF` dengan namanya muncul di bawah ("Search", "Screensaver", "Settings"), tab yang
-sedang tampil tapi tidak difokus berisi abu `#373E42`, tombol ikon yang diam punya lingkaran samar
-`#313234`, dan teks di pill yang tidak sedang difokus meredup ke `#ADB0B3`. Isian fokus tidak
-membesar, supaya tetap di dalam pill. Gradasi gelap di belakang top
-bar menjaga jam tetap kebaca di atas siaran atau gambar yang terang.
+- Seperti di Google TV, tab Home dan Apps berganti begitu difokus, tanpa OK. Search membuka pencarian
+  suara Google TV saat OK ditekan. Di Google TV, Search juga tab yang berganti saat difokus, tapi
+  halamannya ada di dalam launcher Google TV sendiri dan tidak bisa dipanggil app lain. Kalau Search
+  di sini dibuka saat difokus, overlay suara akan muncul setiap fokus lewat.
+- Warnanya diukur dari screenshot launcher bawaan: tab yang difokus berisi biru keabuan muda
+  `#CFDFED` dengan teks hampir hitam, tombol ikon yang difokus berisi lingkaran `#E4F3FF` dengan
+  namanya muncul di bawah ("Search", "Screensaver", "Settings"), tab yang sedang tampil tapi tidak
+  difokus berisi abu `#373E42`, tombol ikon yang diam punya lingkaran samar `#313234`, dan teks di
+  pill yang tidak sedang difokus meredup ke `#ADB0B3`. Isian fokus tidak membesar, supaya tetap di
+  dalam pill.
+- Gradasi gelap di belakang top bar menjaga jam tetap kebaca di atas siaran atau gambar yang terang.
 
 **Hero.** Hero selalu siaran antena full-screen di belakang, dengan ikon TV dari app Live TV bawaan
 TCL, nama dan nomor channel. Fokus awal ada di tile pertama Your apps (TV), CH+/CH− mengganti channel
@@ -268,45 +288,44 @@ siaran. Selama hero menampilkan item, siaran tetap jalan di belakang, suaranya j
 langsung ada tanpa memuat channel lagi. Tuner baru dilepas saat TCL Home tidak tampil (aplikasi lain
 dibuka).
 
-**Animasi.** Lapisan gelap berisi gambar hero fade masuk di atas siaran saat pindah ke item, dan fade
-keluar saat kembali ke siaran. Gambar hero berganti dengan crossfade (dua `ImageView` bergantian), dan
-teks hero fade sambil naik sedikit setiap item berganti. Gambar kartu yang baru selesai diunduh fade
-masuk; yang sudah ada di cache langsung tampil. Tab Home dan Apps berganti dengan crossfade. Kartu dan tile
-membesar saat difokus. Warna pill di top bar (Search, Home, Apps, ambient, Settings) berganti dengan
-transisi, juga saat fokus naik dari kartu ke top bar. Durasinya 200–320 ms, dikali skala animasi sistem (di TV ini sudah disetel
-ke 1; bawaannya 0,5).
-
 **Baris.** Your apps dan Continue watching selalu paling atas. Baris di bawahnya (Recommendations from
 Plex, YouTube Recommended for you, Recently added, YouTube Subscriptions, Spotify, Movies in your
-library) diurutkan dari app yang terakhir dipakai: waktu app atau kartunya terakhir dibuka dari TCL
-Home, atau waktu terakhir nonton di Continue watching, mana yang lebih baru. App yang dibuka lewat
-jalan lain tanpa ditonton tidak menggeser urutan. Kalau waktunya sama (atau belum pernah dipakai),
-urutannya seperti daftar di atas. Urutan dihitung ulang setiap baris dibangun, jadi baru berubah saat
-kembali ke Home dari app lain. Tampilan default cuma hero, baris
-Your apps, dan sedikit intipan Continue watching di tepi bawah layar sebagai tanda masih bisa
-di-scroll. Baris lain terbuka saat fokus turun ke Continue watching, dan tertutup lagi saat fokus naik
-ke Your apps. Saat terbuka, area baris setinggi satu baris plus intipan kecil di atas dan
-bawahnya, dan baris yang difokus selalu berada di posisi yang sama, judulnya ikut terlihat. Baris
-terakhir diberi ruang kosong di bawahnya supaya tetap di posisi itu, dan Down di baris terakhir tidak
-melakukan apa-apa. Di dalam baris, kartu yang difokus dijaga agak jauh dari tepi kiri dan kanan
-supaya cincin fokusnya tidak terpotong.
+library) diurutkan dari app yang terakhir dipakai:
+
+- Patokannya waktu app atau kartunya terakhir dibuka dari TCL Home, atau waktu terakhir nonton di
+  Continue watching, mana yang lebih baru. App yang dibuka lewat jalan lain tanpa ditonton tidak
+  menggeser urutan.
+- Kalau waktunya sama (atau belum pernah dipakai), urutannya seperti daftar di atas.
+- Urutan dihitung ulang setiap baris dibangun, jadi baru berubah saat kembali ke Home dari app lain,
+  tidak saat sedang scroll.
+
+Tampilan default cuma hero, baris Your apps, dan sedikit intipan Continue watching di tepi bawah layar
+sebagai tanda masih bisa di-scroll. Baris lain terbuka saat fokus turun ke Continue watching, dan
+tertutup lagi saat fokus naik ke Your apps. Saat terbuka, area baris setinggi satu baris plus intipan
+kecil di atas dan bawahnya, dan baris yang difokus selalu berada di posisi yang sama, judulnya ikut
+terlihat. Baris terakhir diberi ruang kosong di bawahnya supaya tetap di posisi itu, dan Down di baris
+terakhir tidak melakukan apa-apa. Di dalam baris, kartu yang difokus dijaga agak jauh dari tepi kiri
+dan kanan supaya cincin fokusnya tidak terpotong.
 
 **Kartu.** Kartu berukuran 16:9, kecuali Spotify yang kotak mengikuti cover playlist dan podcast-nya.
-Baris dari satu app punya logo app itu di kiri judulnya; Continue watching, yang isinya
-campuran, tanpa logo. Kartu Plex menampilkan tahun di kiri atas. Di kanan atas ada badge sisa waktu,
-"Next", atau durasi, dan di bawah ada progress bar: oranye untuk Plex, merah untuk YouTube, putih
-untuk aplikasi lain. Gambar kartu di-decode selebar kartu (320 px) dan disimpan di cache memori
-seperdelapan heap app. Gambar yang sama hanya diambil sekali walaupun baris dibangun ulang, dan gambar
-hero (1280 px) punya thread sendiri.
+Baris dari satu app punya logo app itu di kiri judulnya; Continue watching, yang isinya campuran,
+tanpa logo. Kartu Plex menampilkan tahun di kiri atas. Di kanan atas ada badge sisa waktu, "Next",
+atau durasi, dan di bawah ada progress bar: oranye untuk Plex, merah untuk YouTube, putih untuk
+aplikasi lain. Gambar kartu di-decode selebar kartu (320 px) dan disimpan di cache memori seperdelapan
+heap app. Gambar yang sama hanya diambil sekali walaupun baris dibangun ulang, dan gambar hero
+(1280 px) punya thread sendiri.
 
 **Aplikasi.** Baris Your apps hanya berisi favorit, tanpa nama di bawah tile (kalau ada, cuma nama itu
-yang kelihatan di atas Continue watching saat di-scroll). Baris ditutup garis pemisah tipis, tile All
-apps (ikon kotak 3×3) yang membuka tab Apps, dan tile Google TV (ikon rumah) yang membuka launcher
-bawaan. Redirect dilewati 3 detik setelah tile itu dipilih. Selama di launcher bawaan, tombol Home
-tidak membawa balik ke TCL Home karena launcher itu sudah tampil. Buka app apa saja lalu tekan Home,
-atau buka TCL Home dari daftar app. Tab Apps adalah grid 6 kolom di tengah layar dengan dua
-bagian: Favorites (urutan sama dengan baris Your apps) dan All apps (semua app, A–Z, selalu dihitung
-ulang, jadi app baru langsung masuk di posisi abjadnya). Tahan OK di tile untuk membuka menunya:
+yang kelihatan di atas Continue watching saat di-scroll). Barisnya ditutup garis pemisah tipis, lalu:
+
+- tile All apps (ikon kotak 3×3) yang membuka tab Apps;
+- tile Google TV (ikon rumah) yang membuka launcher bawaan. Redirect dilewati 3 detik setelah tile itu
+  dipilih. Selama di launcher bawaan, tombol Home tidak membawa balik ke TCL Home karena launcher itu
+  sudah tampil. Buka app apa saja lalu tekan Home, atau buka TCL Home dari daftar app.
+
+Tab Apps adalah grid 6 kolom di tengah layar dengan dua bagian: Favorites (urutan sama dengan baris
+Your apps) dan All apps (semua app, A–Z, selalu dihitung ulang, jadi app baru langsung masuk di posisi
+abjadnya). Tahan OK di tile untuk membuka menunya:
 
 | Tile | Menu |
 |---|---|
@@ -322,17 +341,28 @@ melewati tile All apps), lalu OK atau Back menyimpan.
 **Navigasi.** Atas dari Your apps ke tab aktif, bawah dari top bar ke kartu terakhir yang difokus (atau
 aplikasi pertama).
 
+**Animasi.** Lapisan gelap berisi gambar hero fade masuk di atas siaran saat pindah ke item, dan fade
+keluar saat kembali ke siaran. Gambar hero berganti dengan crossfade (dua `ImageView` bergantian), dan
+teks hero fade sambil naik sedikit setiap item berganti. Gambar kartu yang baru selesai diunduh fade
+masuk; yang sudah ada di cache langsung tampil. Tab Home dan Apps berganti dengan crossfade. Kartu dan
+tile membesar saat difokus. Warna pill di top bar berganti dengan transisi, juga saat fokus naik dari
+kartu ke top bar. Durasinya 200–320 ms, dikali skala animasi sistem (di TV ini sudah disetel ke 1;
+bawaannya 0,5).
+
 ### Live TV
 
 Channel di hero ikut channel yang terakhir ditonton, baik di Home maupun di Live TV. Ganti channel di
-Live TV lalu tekan Home, dan siaran di Home lanjut di channel itu. Sebaliknya, tile TV
-membuka Live TV di channel yang sedang diputar Home. Live TV yang dibuka lewat jalan lain (misalnya
-tombol input di remote) mulai dari catatannya sendiri, lalu Home yang ikut. Catatannya disimpan
-sebagai nomor channel: ditulis setiap Home ganti channel, dan oleh `HomeRedirectService` dari banner
-channel Live TV.
+Live TV lalu tekan Home, dan siaran di Home lanjut di channel itu. Sebaliknya, tile TV membuka Live TV
+di channel yang sedang diputar Home. Live TV yang dibuka lewat jalan lain (misalnya tombol input di
+remote) mulai dari catatannya sendiri, lalu Home yang ikut. Catatannya disimpan sebagai nomor channel:
+ditulis setiap Home ganti channel, dan oleh `HomeRedirectService` dari banner channel Live TV.
 
-Screenshot TCL Home kosong (0 byte) selama TCL Home tampil: `TvView` terus memutar siaran, dan selama
-itu seluruh layar dianggap konten terproteksi. Untuk melihat tata letak lewat screenshot, pasang build
+Siaran di Home dan di app Live TV adalah dua sesi tuner yang terpisah. Saat tile TV dibuka, Home
+melepas tuner dan Live TV menyetel ulang channel yang sama, jadi selalu ada jeda memuat sebentar.
+
+Screenshot kosong (0 byte) selama siaran tampil di TCL Home. Ini bukan `FLAG_SECURE` (window TCL Home
+tidak memakainya): video tuner dialirkan sebagai sideband stream langsung dari hardware ke panel, jadi
+SurfaceFlinger tidak punya pikselnya. Untuk melihat tata letak lewat screenshot, pasang build
 sementara dengan `show_live_tv` bernilai `false`.
 
 ### Plex
@@ -350,8 +380,8 @@ token user, foto user, dan alamat server yang berhasil disimpan di penyimpanan p
   jadi gambarnya diambil dari server Plex dalam satu request per server
   (`/library/metadata/k1,k2,…`), memakai id server dan `ratingKey` di link tiap item.
 
-Baris dari TvProvider tampil dulu, baris dari API Plex menyusul sekitar 1–3 detik kemudian, dan
-baris Plex terakhir ditampilkan langsung saat Home dibuka lagi. Kalau server Plex belum bisa dihubungi
+Baris dari TvProvider tampil dulu, baris dari API Plex menyusul sekitar 1–3 detik kemudian, dan baris
+Plex terakhir ditampilkan langsung saat Home dibuka lagi. Kalau server Plex belum bisa dihubungi
 (misalnya jaringan belum siap tepat setelah boot), baris Plex dicoba lagi tiap 15 detik selama Home
 tampil.
 
@@ -365,7 +395,7 @@ baris "Recommendations from Plex" (Plex menulisnya dalam bentuk lama
 `plex://server://…/library/metadata/…?viewOffset=<ms>`) diubah dengan cara yang sama. Kalau Plex
 belum siap dalam 40 detik, link autoplay tidak dikirim, dan Plex berhenti di halaman item.
 
-### YouTube
+### YouTube dan Spotify
 
 Baris YouTube mengikuti akun yang sedang aktif di app YouTube, bukan launcher. YouTube menulis ulang
 barisnya lewat job `RecommendationService` yang terjadwal sekitar tiap 4,5 jam, dan juga beberapa
@@ -375,6 +405,9 @@ sekali lalu tekan Home. Selama Home tampil, launcher memantau TvProvider, dan ba
 detik setelah sebuah app selesai menulis ulang barisnya. Menyetel akun YouTube dari launcher tidak
 mungkin: launcher tidak punya akses ke akun Google, dan API resmi YouTube tidak menyediakan feed
 rekomendasi.
+
+Baris Spotify adalah channel "Spotify" yang ditulis app Spotify ke TvProvider: 20 playlist dan podcast
+dengan cover kotak 640×640.
 
 ### Cuaca dan kualitas udara
 
@@ -400,7 +433,7 @@ Service ini cuma menerima event dari tiga app:
 
 | App | Yang dilakukan service |
 |---|---|
-| Google TV | Membuka TCL Home setiap kali Home Google TV tampil |
+| Google TV | Membuka TCL Home setiap kali Home Google TV tampil, kecuali 3 detik setelah tile Google TV dipilih |
 | Live TV | Membaca nomor di banner channel (`com.tcl.tv:id/tvCurChannelNum`) sebagai channel terakhir |
 | Plex | Setelah kartu Plex dibuka, menunggu tombol Resume/Watch/Play lalu mengirim link autoplay. Tidak mengklik apa pun |
 
@@ -426,6 +459,7 @@ Lewat `dumpsys`, struktur UI dari `uiautomator`, dan screenshot (22–23 Oktober
 | Kemulusan (gfxinfo, jalur tombol yang sama) | Tanpa animasi: 113 frame, 49% janky, median 23 ms. Dengan animasi: 264 frame, 26% janky, median 31 ms, p90 sama 46 ms |
 | Urutan baris | Setelah Spotify dibuka dari Your apps: Continue watching, Spotify, Recommendations from Plex, Recently added, Movies, YouTube Recommended for you, Subscriptions |
 | Baris | Kedelapan baris ada, kartu Spotify kotak; tampilan default hero + Your apps + intipan Continue watching |
+| Tile Google TV | Launcher bawaan tetap tampil lebih dari 9 detik; buka YouTube lalu Home kembali ke TCL Home |
 | Channel Live TV → Home | Live TV pindah ke 20, Home lalu memutar CH 20 |
 | Channel Home → Live TV | Home di 21, tile TV membuka Live TV di 21 |
 | Kartu Plex, Plex belum jalan | Film diputar mulai dari posisi resume-nya (sekitar menit ke-74) |
@@ -458,6 +492,11 @@ terproteksi). Tombol yang dikirim lewat ADB tidak membuktikan perilaku remote fi
   Continue watching Plex tidak ada di jalur ini, jadi On Deck diambil dari API Plex. Riwayat tontonan
   YouTube tidak tersedia lewat API resmi sama sekali. App baru menulis barisnya ke TvProvider beberapa
   menit setelah boot.
+- **Channel app lain di TvProvider**, dibaca lewat TCL Home: Disney+ Hotstar (10 item, gambar
+  1920×1080), Apple TV (14 item, 3840×2160, tanpa deskripsi), Catchplay (3 channel, 704×396), Viu
+  (63 item, 752×424), Vidio (640×360), Spotify (640×640), YouTube (640×480, 4:3). Netflix dan HBO Max
+  tidak menulis channel sama sekali, dan empat channel Google TV/Play Movies ada tapi kosong.
+  Rekomendasi di hero Google TV diambil dari server Google dengan akun Google, tidak lewat TvProvider.
 - **Watch Next per jenis** (`tools/tvprobe.sh` mencatat `watch_next_types`): Viu 9 CONTINUE + 7 NEXT,
   Disney+ Hotstar 8 CONTINUE + 1 NEXT, Vidio 1 + 1, semuanya dengan posisi tonton. Jellyfin 1 NEW
   tanpa posisi. TCL browser 30 NEW tanpa posisi (artikel dan promo). VLC 4 CONTINUE berisi nama file
@@ -512,3 +551,13 @@ terproteksi). Tombol yang dikirim lewat ADB tidak membuktikan perilaku remote fi
   jumlah baris per aplikasi, nama channel, bentuk link dan URI gambar (id dan angka disamarkan), rentang
   `_id` program, dan hash judul per aplikasi, bukan judul tontonan. `tools/tvprobe.sh live` menguji
   siaran antena di `TvView` selama 12 detik.
+
+## Menutup ADB
+
+Port 5555 itu plaintext. TV ini `ro.adb.secure=1`, jadi perangkat lain tetap butuh izin "Allow" di
+layar. Tapi kalau sudah tidak dipakai: Developer options → matikan USB debugging → "Revoke USB
+debugging authorizations" → reboot. Cek dari Mac: `nc -vz <ip-tv> 5555` harus menjawab
+"Connection refused".
+
+ADB dipakai `tools/build-install.sh` untuk memasang TCL Home, jadi biarkan menyala selama launcher
+masih diubah.
