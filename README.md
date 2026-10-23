@@ -5,8 +5,8 @@ Debloat TV TCL Google TV lewat ADB di Wi-Fi, berdasarkan
 yang sama persis). Semua aplikasi cuma di-**disable** untuk user 0, tidak ada yang di-uninstall, dan
 `tools/restore.sh` mengembalikan TV ke kondisi sebelum debloat.
 
-Status: debloat selesai dan sudah dicek di TV. Launcher custom belum dikerjakan (lihat
-[Fase berikutnya](#fase-berikutnya-launcher)).
+Repo ini juga berisi TCL Home, launcher pengganti Home Google TV dengan siaran antena live, Plex, dan
+YouTube di satu layar (lihat [Launcher (TCL Home)](#launcher-tcl-home)). Keduanya sudah dicek di TV.
 
 ## TV ini
 
@@ -109,8 +109,10 @@ Update firmware di build ini datang lewat Play Services, jadi `ttvs` aman di-dis
 - Wajib untuk TV: `com.tcl.tv`, `com.tcl.tvinput`, `com.tcl.suspension` (menu Input),
   `com.tcl.dashboard`, `com.tcl.autopair`, `com.tcl.systemserver`, `com.tcl.providers.config`,
   `com.tcl.globalkeyoverlay`, Play Store, Play Services, keyboard, Bluetooth.
-- `com.google.android.apps.tv.launcherx` dan `com.google.android.tungsten.setupwraith`: belum ada
-  launcher pengganti.
+- `com.google.android.apps.tv.launcherx` dan `com.google.android.tungsten.setupwraith`. Kalau
+  launcherx di-disable, Home jatuh ke `setupwraith/.RecoveryActivity` (prioritas HOME 1, di atas
+  TCL Home), dan komponen itu tidak bisa di-disable dari shell. Setupwraith sendiri memiliki Wi-Fi
+  yang tersimpan. Pemilih profil Google TV dan tombol aplikasi di remote juga milik launcherx.
 - `com.tcl.factory.view`: paket factory. Jangan pernah dibuka, bahkan cuma untuk melihat.
 - `com.tcl.android.webview`: WebView yang aktif adalah milik Google, yang TCL tidak terpakai.
 
@@ -140,7 +142,7 @@ adb -s <ip-tv>:5555 shell settings put global private_dns_mode opportunistic
 Atau lewat TV: Settings → Network and Internet → Private DNS → Automatic. `restore.sh` mengembalikan
 nilai aslinya (kosong).
 
-## Hasil pengecekan di TV (22 Oktober 2026)
+## Hasil pengecekan debloat di TV (22 Oktober 2026)
 
 | Fitur | Bukti |
 |---|---|
@@ -186,270 +188,291 @@ layar. Tapi kalau sudah tidak dipakai: Developer options → matikan USB debuggi
 debugging authorizations" → reboot. Cek dari Mac: `nc -vz <ip-tv> 5555` harus menjawab
 "Connection refused".
 
-ADB sengaja dibiarkan menyala untuk fase launcher.
+ADB dipakai `tools/build-install.sh` untuk memasang TCL Home, jadi biarkan menyala selama launcher
+masih diubah.
 
 ## Launcher (TCL Home)
 
 `launcher/` berisi TCL Home: Android framework biasa (Java, tanpa AndroidX, tanpa kode native, jadi
 aman untuk `armeabi-v7a`), dibangun langsung dengan tool SDK oleh `build_apk` di `tools/lib.sh`.
-APK-nya sekitar 45 KB. Dengan ketujuh baris terisi, launcher memakai sekitar 165 MB RAM (PSS), sekitar
-90 MB di antaranya native heap (bitmap kartu dan hero).
+APK-nya sekitar 58 KB. Saat jalan memakai sekitar 125 MB RAM (PSS) di tampilan default, dan sekitar
+165 MB setelah semua baris dan gambarnya termuat. Sebagian besar selisihnya adalah bitmap kartu.
+
+Desainnya mengikuti prototipe di MagicPath:
+[Google TV Home + Plex](https://designs.magicpath.ai/v1/mighty-week-8644).
+
+### Pasang
 
 ```bash
 tools/build-install.sh   # build, install, beri izin, nyalakan redirect Home, cek Home di layar
 ```
 
-Ubah tampilan dan isi lewat `launcher/res/values/config.xml`, lalu jalankan `tools/build-install.sh`:
+Script ini memasang APK, memberi izin `READ_TV_LISTINGS`, menambahkan `HomeRedirectService` ke daftar
+service aksesibilitas (service lain yang sudah aktif tetap dipertahankan), lalu membuka Settings dan
+menekan Home. Kalau yang tampil bukan TCL Home, redirect dimatikan lagi dan script keluar dengan
+error, jadi TV tidak pernah tertinggal tanpa Home.
+
+Butuh JDK 17 dan Android SDK: `brew install openjdk@17`, `brew install --cask
+android-commandlinetools`, lalu `sdkmanager "platforms;android-34" "build-tools;34.0.0"`.
+
+`tools/restore.sh` mengembalikan setelan aksesibilitas ke baseline, jadi redirect mati dan Google TV
+kembali jadi Home. TCL Home tetap terpasang tapi tidak dipakai.
+
+### Setelan
+
+Ubah lewat `launcher/res/values/config.xml`, lalu jalankan `tools/build-install.sh`:
 
 | Kunci | Isi |
 |---|---|
-| `profile_initial` | Huruf di tombol profil bulat kiri atas, sebelum foto user Plex kebaca |
-| `show_live_tv` | TV antena live di belakang Home |
+| `show_live_tv` | Siaran antena live di hero Home |
 | `live_tv_input` | Input tuner (`com.tcl.tvinput/.TunerInputService/HW2`) |
-| `dock_apps` | Favorit awal (baris "Your apps") sebelum favorit pernah diubah dari remote |
+| `profile_initial` | Huruf di tombol profil, sebelum foto user Plex kebaca |
+| `dock_apps` | Favorit awal di baris Your apps, sebelum favorit pernah diubah dari remote |
 | `hidden_apps` | Aplikasi yang tidak pernah tampil |
 | `watch_next_excluded` | Aplikasi yang dibuang dari Continue watching (TCL browser, VLC) |
 | `youtube_package`, `youtube_rows` | Channel YouTube di TvProvider yang jadi baris, berurutan |
 | `stock_home_activity` | Home Google TV yang dialihkan ke TCL Home |
 | `plex_enabled` | Baris dari API Plex: On Deck di Continue watching, Recently added, Movies in your library |
-| `plex_recommendations` | Nama channel Plex di TvProvider untuk baris dan tiga pilihan di samping LIVE |
-| `plex_home_user` | User Plex Home untuk Continue watching, posisi di daftar Plex Home (2 di TV ini). Harus user tanpa PIN |
-| `weather_latitude`, `weather_longitude` | Lokasi cuaca dan kualitas udara di samping jam, koordinat tingkat kota (dua desimal) |
+| `plex_recommendations` | Nama channel Plex di TvProvider, untuk barisnya dan tiga pilihan di samping LIVE |
+| `plex_home_user` | User Plex Home yang dipakai, posisi di daftar Plex Home (2 di TV ini). Harus user tanpa PIN |
+| `weather_latitude`, `weather_longitude` | Lokasi cuaca dan kualitas udara, koordinat tingkat kota (dua desimal) |
 
-Top bar seperti desain: tombol profil, pill Search / Home / Apps, pill ambient (screensaver,
-sekarang Aerial Views) dan Settings, lalu di kanan jam besar, dan di bawahnya rata kanan: ikon cuaca, suhu, peluang hujan,
-dan kualitas udara. Semuanya diambil dari Open-Meteo (tanpa akun atau key, yang dikirim cuma
-koordinat di config). Peluang hujan itu angka untuk 15 menit saat ini. AQI pakai skala US AQI, dan
-pill-nya diwarnai pastel sesuai kategorinya (hijau, kuning, oranye, merah, ungu, merah bata) dengan
-teks gelap. Kalau cuma data kualitas udara yang gagal, pill AQI disembunyikan. Datanya dibaca ulang
-tiap 30 menit atau 5 menit setelah gagal, dan bacaan terakhir disimpan jadi langsung tampil saat
-Home dibuka. Sebelum bacaan pertama, baris cuacanya belum muncul. Ikonnya: matahari atau bulan
-(cerah, ikut siang/malam), cerah berawan (matahari atau bulan di balik awan), berawan, kabut, hujan,
-dan petir. Tombol profil memakai foto user Plex
-di `plex_home_user` (huruf `profile_initial` sebelum fotonya kebaca) dan membuka pemilih profil
-Google TV. Foto akun Google tidak bisa dibaca app pihak ketiga. Search membuka pencarian Google TV
-dalam mode suara. Apps membuka grid kartu aplikasi di tengah layar (6 kolom): Favorites, lalu All apps.
+Favorit dan urutannya, channel terakhir, cuaca terakhir, dan login Plex disimpan di penyimpanan privat
+app di TV, bukan di `config.xml`.
 
-Isi Home mengikuti desain MagicPath:
-- Hero di atas baris. Default-nya stage LIVE: siaran antena full-screen di belakang, nama channel,
-  nomor channel, dan petunjuk tombol. Fokus awal ada di pill LIVE, dan CH+/CH− mengganti channel.
-  OK di LIVE membuka Live TV full-screen di channel yang sama.
-- Channel di LIVE ikut channel yang terakhir ditonton, baik di Home maupun di Live TV. Ganti channel
-  di Live TV, lalu tekan Home, dan siaran di Home lanjut di channel itu. Sebaliknya, OK di LIVE dan
-  tile TV membuka Live TV di channel yang sedang diputar Home. Live TV yang dibuka lewat jalan lain
-  (misalnya tombol input di remote) tetap mulai dari catatannya sendiri, lalu Home yang ikut.
-- Di kanan LIVE ada tiga titik: tiga item pertama "Recommendations from Plex" (atau Recently added
-  kalau baris itu kosong). Panah kanan pindah ke titik itu, siaran berhenti, dan hero menampilkan
-  gambar item itu full-screen, logo app dan nama baris asalnya,
-  judul, meta, dan deskripsi dua baris. Panah kiri kembali ke LIVE dan siaran jalan lagi.
-- Fokus di kartu mana pun juga mengganti hero dengan item kartu itu: logo app dan baris asalnya,
-  meta (episode, tahun, atau channel; lalu sisa waktu atau durasi, dan kapan terakhir ditonton),
-  dan deskripsi. Nama app tidak ditulis karena sudah diwakili logonya. Siaran berhenti selama fokus di baris, jadi tidak ada suara di belakang.
-- Urutan baris: Your apps, Continue watching, Recommendations from Plex, YouTube Recommended for
-  you, Recently added, YouTube Subscriptions, Movies in your library.
-- Tampilan default cuma hero, baris Your apps, dan sedikit intipan baris berikutnya (judul dan ujung
-  atas kartunya) di tepi bawah layar sebagai tanda masih bisa di-scroll. Baris lain baru terbuka saat
-  fokus turun ke Continue watching, dan tertutup lagi saat fokus naik ke Your apps atau stage. Scrim
-  gelap di kiri dan bawah menjaga teks tetap kebaca di atas gambar yang terang. Baris dari satu
-  app punya logo app itu di kiri judulnya. Continue watching, yang isinya campuran, tanpa logo. Kartu menampilkan tahun di kiri atas untuk baris Plex (kartu di Continue watching tanpa label, appnya kelihatan di hero saat kartu difokus),
-  badge kanan atas (sisa waktu, "Next", atau durasi), dan progress bar oranye untuk Plex, merah untuk
-  YouTube, putih untuk aplikasi lain.
-- Baris Your apps hanya berisi app favorit, ditutup garis pemisah tipis dan tile All apps (ikon kotak 3×3) yang membuka tab Apps.
-  Grid Apps punya dua bagian: Favorites (urutan sama dengan baris Your apps) dan All apps (semua app,
-  A–Z, selalu dihitung ulang, jadi app baru langsung masuk di posisi abjadnya). Favorit awal diambil
-  dari `dock_apps`; setelah diubah dari remote, daftarnya disimpan di TV, bukan di `config.xml`.
-- Tahan OK di tile aplikasi untuk membuka menunya. Di favorit: Move (khusus di baris Your apps),
-  Remove from favorites, App info, dan Uninstall. Di app lain: Add to favorites, App info, dan
-  Uninstall. Uninstall hanya muncul untuk app yang bisa dihapus (app sistem tidak) dan membuka
-  konfirmasi bawaan sistem. Move menandai tile dengan ring kuning dan chevron di atas gradasi gelap di tepi kiri/kanan card ke arah yang masih bisa
-  dituju (app paling kiri cuma chevron kanan, favorit terakhir cuma chevron kiri), kiri/kanan
-  menggeser posisinya di antara favorit (tidak bisa melewati tile All apps), lalu OK atau Back
-  menyimpan.
-- Navigasi: atas dari Your apps ke stage, atas dari stage ke tab aktif, bawah dari top bar ke stage,
-  bawah dari stage ke kartu terakhir (atau aplikasi pertama).
+### Tampilan
 
-OK di kartu membuka item lewat intent yang ditulis aplikasinya. Gambar kartu diambil lewat internet,
-di-decode selebar kartu (320 px), dan disimpan di cache memori seperdelapan heap app. Gambar yang sama
-hanya diambil sekali walaupun baris dibangun ulang, dan gambar hero (1280 px) punya thread sendiri.
-Selama Home tampil, launcher memantau TvProvider. Kalau ada app yang menulis ulang barisnya,
-baris dibaca lagi dua detik setelah tulisan terakhir.
+**Top bar.** Kiri ke kanan: foto user Plex (huruf `profile_initial` sebelum fotonya kebaca), yang
+membuka pemilih profil Google TV; pill Search / Home / Apps; pill ambient (screensaver, sekarang
+Aerial Views) dan Settings. Di kanan ada jam besar, dan di bawahnya rata kanan: ikon cuaca, suhu,
+peluang hujan, dan pill AQI. Search membuka pencarian suara Google TV. Gradasi gelap di belakang top
+bar menjaga jam tetap kebaca di atas siaran atau gambar yang terang.
 
-Plex: Continue watching juga berisi On Deck user Plex di `plex_home_user`, digabung dengan Watch Next
-dan diurutkan dari yang terakhir ditonton. Recently added dan Movies in your library (20 film acak
-dari library film pertama) juga dari API Plex. Baris "Recommendations from Plex" dibaca dari
-TvProvider, tapi gambarnya `content://com.plexapp.android.RecommendationsProvider/…`, yang hanya
-boleh dibuka launcher bawaan. Karena link tiap item memuat id server dan `ratingKey`, gambarnya
-diambil dari server Plex dalam satu request per server (`/library/metadata/k1,k2,…`). Login sekali lewat kartu "Sign in to Plex" di ujung baris
-itu (atau `adb shell am start -n dev.tcl.home/.PlexLoginActivity`): TV menampilkan kode, masukkan
-di plex.tv/link dari HP. Token akun, token user, dan alamat server yang berhasil disimpan di
-penyimpanan privat aplikasi. Watch Next tampil dulu, On Deck menyusul sekitar 1–3 detik kemudian, dan
-On Deck terakhir ditampilkan langsung saat Home dibuka lagi. Kartu Plex langsung memutar itemnya dari
-posisi terakhir ditonton. Launcher membuka halaman item lewat rute app Plex sendiri,
-`plex://libraries/<machineId server>/movie/x/<ratingKey>` (jalan untuk film maupun episode; segmen
-`movie` dan slug `x` tidak dicek), lalu `HomeRedirectService` mengirim
+**Hero.** Default-nya stage LIVE: siaran antena full-screen di belakang, nama dan nomor channel, dan
+petunjuk tombol. Fokus awal ada di pill LIVE, CH+/CH− mengganti channel, dan OK membuka Live TV
+full-screen di channel yang sama. Di kanan LIVE ada tiga titik untuk tiga item pertama
+"Recommendations from Plex" (atau Recently added kalau baris itu kosong). Panah kanan pindah ke titik
+itu: siaran berhenti, dan hero menampilkan gambar item full-screen, logo app dan nama baris asalnya,
+judul, meta, dan deskripsi dua baris. Panah kiri kembali ke LIVE. Fokus di kartu mana pun juga
+mengganti hero dengan item kartu itu, dan siaran berhenti selama fokus ada di baris konten, jadi tidak
+ada suara di belakang.
+
+**Baris.** Urutannya: Your apps, Continue watching, Recommendations from Plex, YouTube Recommended for
+you, Recently added, YouTube Subscriptions, Movies in your library. Tampilan default cuma hero, baris
+Your apps, dan sedikit intipan Continue watching di tepi bawah layar sebagai tanda masih bisa
+di-scroll. Baris lain terbuka saat fokus turun ke Continue watching, dan tertutup lagi saat fokus naik
+ke Your apps atau stage.
+
+**Kartu.** Baris dari satu app punya logo app itu di kiri judulnya; Continue watching, yang isinya
+campuran, tanpa logo. Kartu Plex menampilkan tahun di kiri atas. Di kanan atas ada badge sisa waktu,
+"Next", atau durasi, dan di bawah ada progress bar: oranye untuk Plex, merah untuk YouTube, putih
+untuk aplikasi lain. Gambar kartu di-decode selebar kartu (320 px) dan disimpan di cache memori
+seperdelapan heap app. Gambar yang sama hanya diambil sekali walaupun baris dibangun ulang, dan gambar
+hero (1280 px) punya thread sendiri.
+
+**Aplikasi.** Baris Your apps hanya berisi favorit, ditutup garis pemisah tipis dan tile All apps
+(ikon kotak 3×3) yang membuka tab Apps. Tab Apps adalah grid 6 kolom di tengah layar dengan dua
+bagian: Favorites (urutan sama dengan baris Your apps) dan All apps (semua app, A–Z, selalu dihitung
+ulang, jadi app baru langsung masuk di posisi abjadnya). Tahan OK di tile untuk membuka menunya:
+
+| Tile | Menu |
+|---|---|
+| Favorit di baris Your apps | Move, Remove from favorites, App info, Uninstall |
+| Favorit di grid | Remove from favorites, App info, Uninstall |
+| App lain | Add to favorites, App info, Uninstall |
+
+Uninstall hanya muncul untuk app yang bisa dihapus (app sistem tidak) dan membuka konfirmasi bawaan
+sistem. Move menandai tile dengan ring kuning dan chevron di atas gradasi gelap di tepi kiri/kanan
+card, hanya ke arah yang masih bisa dituju. Kiri/kanan menggeser tile di antara favorit (tidak bisa
+melewati tile All apps), lalu OK atau Back menyimpan.
+
+**Navigasi.** Atas dari Your apps ke stage, atas dari stage ke tab aktif, bawah dari top bar ke stage,
+bawah dari stage ke kartu terakhir yang difokus (atau aplikasi pertama).
+
+### Live TV
+
+Channel di LIVE ikut channel yang terakhir ditonton, baik di Home maupun di Live TV. Ganti channel di
+Live TV lalu tekan Home, dan siaran di Home lanjut di channel itu. Sebaliknya, OK di LIVE dan tile TV
+membuka Live TV di channel yang sedang diputar Home. Live TV yang dibuka lewat jalan lain (misalnya
+tombol input di remote) mulai dari catatannya sendiri, lalu Home yang ikut. Catatannya disimpan
+sebagai nomor channel: ditulis setiap Home ganti channel, dan oleh `HomeRedirectService` dari banner
+channel Live TV.
+
+Screenshot TCL Home kosong (0 byte) selama stage LIVE tampil: selama `TvView` memutar siaran, seluruh
+layar dianggap konten terproteksi. Pindah fokus ke titik pick atau ke kartu, siaran berhenti, dan
+screenshot bisa diambil lagi.
+
+### Plex
+
+Login sekali lewat kartu "Sign in to Plex" di Continue watching (atau `adb shell am start -n
+dev.tcl.home/.PlexLoginActivity`): TV menampilkan kode, masukkan di plex.tv/link dari HP. Token akun,
+token user, foto user, dan alamat server yang berhasil disimpan di penyimpanan privat app.
+
+- **Continue watching** berisi On Deck user `plex_home_user`, digabung dengan Watch Next sistem (jenis
+  CONTINUE dan NEXT, tanpa `watch_next_excluded`) dan diurutkan dari yang terakhir ditonton.
+- **Recently added** dan **Movies in your library** (20 film acak dari library film pertama) diambil
+  dari API Plex.
+- **Recommendations from Plex** dibaca dari TvProvider. Gambarnya di sana
+  `content://com.plexapp.android.RecommendationsProvider/…`, yang hanya boleh dibuka launcher bawaan,
+  jadi gambarnya diambil dari server Plex dalam satu request per server
+  (`/library/metadata/k1,k2,…`), memakai id server dan `ratingKey` di link tiap item.
+
+Baris dari TvProvider tampil dulu, baris dari API Plex menyusul sekitar 1–3 detik kemudian, dan
+baris Plex terakhir ditampilkan langsung saat Home dibuka lagi. Kalau server Plex belum bisa dihubungi
+(misalnya jaringan belum siap tepat setelah boot), baris Plex dicoba lagi tiap 15 detik selama Home
+tampil.
+
+**Kartu Plex langsung memutar itemnya dari posisi terakhir ditonton.** Launcher membuka halaman item
+lewat rute app Plex sendiri, `plex://libraries/<machineId server>/movie/x/<ratingKey>` (jalan untuk
+film maupun episode), lalu `HomeRedirectService` mengirim
 `…/movie/x/<ratingKey>?autoplay=1&offset=<detik>` begitu Plex menampilkan tombol Resume, Watch, atau
-Play (tanda Plex sudah tersambung ke server). Link autoplay langsung tidak dipakai sendirian karena
-Plex yang harus start dulu mencoba memutar sebelum tersambung ke server dan menampilkan "Can't Reach
-Server". `offset` dibaca Plex dalam detik; tanpa `offset` Plex memutar dari awal walaupun ada posisi
-resume. Link dari baris "Recommendations from Plex" (Plex menulisnya dalam bentuk lama
-`plex://server://…/library/metadata/…?viewOffset=<ms>`) diubah dengan cara yang sama.
+Play, tanda Plex sudah tersambung ke server. Link autoplay tidak dikirim langsung karena Plex yang
+harus start dulu mencoba memutar sebelum tersambung dan menampilkan "Can't Reach Server". Link dari
+baris "Recommendations from Plex" (Plex menulisnya dalam bentuk lama
+`plex://server://…/library/metadata/…?viewOffset=<ms>`) diubah dengan cara yang sama. Kalau Plex
+belum siap dalam 40 detik, link autoplay tidak dikirim, dan Plex berhenti di halaman item.
 
-Cara jadi Home: Google TV tetap enabled dan tetap jadi Home sistem. Di build ini Google TV punya
-prioritas HOME 2, setupwraith 1, dan aplikasi pihak ketiga selalu 0. Selain itu tidak ada preferensi
-Home yang tersimpan, jadi `cmd package set-home-activity` dan `cmd role add-role-holder` menjawab
-sukses tanpa mengubah apa pun. Karena itu TCL Home memakai service aksesibilitas
-(`HomeRedirectService`, cara yang sama dengan at4k): setiap kali HomeActivity Google TV muncul, TCL
-Home dibuka di atasnya. Service ini cuma menerima event dari tiga app: Google TV, Live TV, dan Plex. Dari
-Live TV dia membaca nomor di banner channel (`com.tcl.tv:id/tvCurChannelNum`) dan menyimpannya
-sebagai channel terakhir. Dari Plex dia hanya menunggu tombol Resume/Watch/Play muncul setelah kartu
-Plex dibuka, lalu mengirim link autoplay; dia tidak mengklik apa pun. Plex app React Native, dan
-tombolnya baru terlihat oleh service dengan `flagIncludeNotImportantViews`. Dia tidak memfilter tombol,
-karena filter tombol di keluarga G09 membuat volume tidak bisa ditahan. Layar Google TV lain
-seperti pemilih profil tetap bisa dibuka. Saat boot, service tersambung setelah Google TV tampil,
-jadi dalam lima menit pertama setelah boot service langsung membuka TCL Home.
-
-Sudah dicek di TV (22 Oktober 2026), lewat `dumpsys` dan struktur UI dari `uiautomator`:
-
-| Tes | Hasil |
-|---|---|
-| Tekan Home dari Settings atau YouTube | TCL Home |
-| Setelah reboot | TCL Home di detik ke-5, 15, dan 30 |
-| Standby lalu nyala lagi | TCL Home, siaran lanjut di channel terakhir |
-| CH+ / CH− | `1 TVRI Nasional` → `2 TVRI DKI HD` → kembali |
-| Buka aplikasi dari baris | YouTube terbuka, Home kembali ke TCL Home |
-| Pemilih profil Google TV | Tetap terbuka, BACK kembali ke TCL Home |
-| Baris konten | Continue watching berisi episode Viu dengan progress bar, dua baris YouTube terisi, Your apps di paling bawah (screenshot dengan `show_live_tv=false`) |
-| OK di kartu | Kartu Continue watching membuka Viu, kartu YouTube membuka YouTube; Home kembali ke TCL Home |
-| Login Plex | Kode tampil, setelah dimasukkan di plex.tv/link layar menutup sendiri |
-| On Deck Plex | Muncul di Continue watching dengan poster dari VPS, label episode, dan progress bar |
-| Top bar | Profil membuka pemilih profil Google TV, ambient memulai Aerial Views, Settings membuka Settings, Search membuka pencarian suara Google TV, Apps membuka grid, Home kembali ke baris |
-| Kartu Plex | Lihat catatan app Plex di bawah: link lama berakhir di beranda Plex, rute `plex://libraries/…` membuka detail item |
-
-Dicek lagi 23 Oktober 2026, setelah hero dan stage dibuat:
-
-| Tes | Hasil |
-|---|---|
-| Fokus awal | Pill LIVE, siaran jalan (ada sesi TV input, screencap 0 byte) |
-| Kanan dari LIVE | Titik pick pertama, siaran berhenti, hero berisi gambar, sumber, meta, deskripsi (`shots/stage-pick1f.png`) |
-| Bawah ke kartu | Hero ganti ke item kartu (`shots/small-cards.png`), naik lagi kembali ke titik yang sama |
-| Kiri ke LIVE | Siaran jalan lagi, hero kembali ke nama channel |
-| Atas dari LIVE / bawah dari top bar | Tab Home / pill LIVE |
-| Baris | Ketujuh baris ada sesuai urutan desain, dicek lewat `uiautomator` dan screenshot (`shots/rows-yt.png`, `shots/small-bottom.png`) |
-| Recommendations from Plex | Gambar terisi dari server Plex |
-| Avatar | Foto user Plex #2 |
-| Baris YouTube setelah YouTube ditutup | Dibaca ulang otomatis begitu YouTube menulis ulang barisnya (cek dengan log sementara) |
-| Channel dari Live TV ke Home | Live TV pindah ke 20, Home lalu memutar CH 20 (sebelumnya 21) |
-| Channel dari Home ke Live TV | Home di 21, tile TV dan OK di LIVE membuka Live TV di 21; Live TV yang dibuka dari ikon biasa tetap di catatannya sendiri |
-
-Screenshot TCL Home kosong (0 byte) selama stage LIVE tampil: selama `TvView` memutar siaran,
-seluruh layar dianggap konten terproteksi. Pindah fokus ke titik pick atau ke kartu, siaran berhenti,
-dan screenshot bisa diambil lagi.
-
-Jangan `am force-stop dev.tcl.home`: service redirect ikut mati dan tidak tersambung lagi, jadi
-Home Google TV yang tampil. Jalankan `tools/build-install.sh` lagi untuk menyambungkannya.
+### YouTube
 
 Baris YouTube mengikuti akun yang sedang aktif di app YouTube, bukan launcher. YouTube menulis ulang
 barisnya lewat job `RecommendationService` yang terjadwal sekitar tiap 4,5 jam, dan juga beberapa
 detik setelah app YouTube ditutup. Broadcast `INITIALIZE_PROGRAMS` dan menjalankan job itu paksa
 (`cmd jobscheduler run -f`) tidak mengubah isinya. Jadi setelah ganti profil Google TV, buka YouTube
-sekali lalu tekan Home, dan baris YouTube di TCL Home ikut berganti beberapa detik kemudian.
-Menyetel akun YouTube di launcher tidak mungkin: launcher tidak punya akses ke akun Google, dan API
-resmi YouTube tidak menyediakan feed rekomendasi.
-Belum dicek dengan remote fisik: tombol Home, tombol aplikasi, tombol mic, dan menahan volume.
-Belum terlihat juga apakah Viu langsung masuk ke episode yang dipilih (layar pemutarnya terproteksi).
+sekali lalu tekan Home. Selama Home tampil, launcher memantau TvProvider, dan baris dibaca lagi dua
+detik setelah sebuah app selesai menulis ulang barisnya. Menyetel akun YouTube dari launcher tidak
+mungkin: launcher tidak punya akses ke akun Google, dan API resmi YouTube tidak menyediakan feed
+rekomendasi.
 
-`tools/restore.sh` mengembalikan setelan aksesibilitas ke baseline, jadi redirect mati dan Google TV
-kembali jadi Home. TCL Home tetap terpasang tapi tidak dipakai.
+### Cuaca dan kualitas udara
 
-Catatan untuk tahap berikutnya:
-- Desain: tampilannya tetap Home Google TV (tab Home/Apps, top bar, baris tile, baris aplikasi
-  bulat, tab Apps berisi kartu 16:9). Layar default adalah siaran TV antena full-screen di belakang
-  UI. Panah kanan dari situ pindah ke tiga preview Plex, dan panah bawah masuk ke baris konten:
-  Continue watching (Watch Next sistem jenis CONTINUE dan NEXT tanpa TCL browser dan VLC, digabung
-  dengan On Deck Plex, urut dari yang terakhir ditonton), Recommendations from Plex, YouTube
-  Recommended for you, Recently added, aplikasi, YouTube Subscriptions, dan Movies in your library.
-  Ikon profil membuka pemilih profil Google TV bawaan.
-  Prototipenya ada di MagicPath: [Google TV Home + Plex](https://designs.magicpath.ai/v1/mighty-week-8644),
-  proyek [di sini](https://www.magicpath.ai/files/464025014786736128). Datanya masih contoh.
-- Yang bisa dibaca launcher pihak ketiga dari TvProvider dengan izin `READ_TV_LISTINGS`, diukur
-  dengan `tools/tvprobe.sh` (lihat di bawah):
+Diambil dari Open-Meteo (tanpa akun atau key; yang dikirim cuma koordinat di `config.xml`). Peluang
+hujan adalah angka untuk 15 menit saat ini. AQI memakai skala US AQI, dan pill-nya diwarnai pastel
+sesuai kategorinya (hijau, kuning, oranye, merah, ungu, merah bata) dengan teks gelap. Kalau cuma data
+kualitas udara yang gagal, pill AQI disembunyikan. Data dibaca ulang tiap 30 menit, atau 5 menit
+setelah gagal, dan bacaan terakhir disimpan jadi langsung tampil saat Home dibuka. Sebelum bacaan
+pertama, baris cuacanya belum muncul. Ikonnya: matahari atau bulan (cerah, ikut siang/malam), cerah
+berawan (matahari atau bulan di balik awan), berawan, kabut, hujan, dan petir.
 
-  | Sumber | Baris channel | Isi baris (preview) | Continue watching (Watch Next) |
+### Cara jadi Home
+
+Google TV tetap enabled dan tetap jadi Home sistem. Di build ini Google TV punya prioritas HOME 2,
+setupwraith 1, dan aplikasi pihak ketiga selalu 0. Tidak ada preferensi Home yang tersimpan, jadi
+`cmd package set-home-activity` dan `cmd role add-role-holder` menjawab sukses tanpa mengubah apa pun.
+Karena itu TCL Home memakai service aksesibilitas (`HomeRedirectService`, cara yang sama dengan at4k):
+setiap kali HomeActivity Google TV muncul, TCL Home dibuka di atasnya. Layar Google TV lain seperti
+pemilih profil tetap bisa dibuka. Saat boot, service tersambung setelah Google TV tampil, jadi dalam
+lima menit pertama setelah boot service langsung membuka TCL Home.
+
+Service ini cuma menerima event dari tiga app:
+
+| App | Yang dilakukan service |
+|---|---|
+| Google TV | Membuka TCL Home setiap kali Home Google TV tampil |
+| Live TV | Membaca nomor di banner channel (`com.tcl.tv:id/tvCurChannelNum`) sebagai channel terakhir |
+| Plex | Setelah kartu Plex dibuka, menunggu tombol Resume/Watch/Play lalu mengirim link autoplay. Tidak mengklik apa pun |
+
+Service tidak memfilter tombol, karena filter tombol di keluarga G09 membuat volume tidak bisa ditahan.
+Plex adalah app React Native, dan tombolnya baru terlihat oleh service dengan
+`flagIncludeNotImportantViews`.
+
+Jangan `am force-stop dev.tcl.home`: service redirect ikut mati dan tidak tersambung lagi, jadi Home
+Google TV yang tampil. Jalankan `tools/build-install.sh` lagi untuk menyambungkannya.
+
+### Sudah dicek di TV
+
+Lewat `dumpsys`, struktur UI dari `uiautomator`, dan screenshot (22–23 Oktober 2026):
+
+| Tes | Hasil |
+|---|---|
+| Tekan Home dari Settings atau YouTube | TCL Home |
+| Reboot | TCL Home tampil sekitar 30 detik setelah perintah reboot |
+| Standby lalu nyala lagi | TCL Home, siaran lanjut di channel terakhir |
+| Fokus awal dan CH+/CH− | Pill LIVE dengan siaran jalan; `1 TVRI Nasional` → `2 TVRI DKI HD` → kembali |
+| Stage | Kanan dari LIVE ke titik pick (siaran berhenti, hero berisi gambar dan deskripsi), kiri kembali ke LIVE |
+| Baris | Ketujuh baris ada sesuai urutan; tampilan default hero + Your apps + intipan Continue watching |
+| Channel Live TV → Home | Live TV pindah ke 20, Home lalu memutar CH 20 |
+| Channel Home → Live TV | Home di 21, tile TV dan OK di LIVE membuka Live TV di 21 |
+| Kartu Plex, Plex belum jalan | Film diputar mulai dari posisi resume-nya (sekitar menit ke-74) |
+| Kartu Plex, Plex di background | Kartu rekomendasi diputar dari detik 1.070, posisi resume-nya |
+| Kartu Plex setelah reboot | Halaman item lalu link autoplay 11 detik kemudian, player Plex terbuka |
+| Baris Plex setelah reboot | On Deck muncul sendiri di Home pertama (uptime 65 detik) tanpa Home dibuka ulang |
+| Baris YouTube setelah YouTube ditutup | Dibaca ulang otomatis begitu YouTube menulis ulang barisnya |
+| Favorit | Add dari grid lalu Remove dari Home; Move tidak bisa melewati tile All apps; chevron hanya ke arah yang mungkin |
+| Menu tile | App info membuka halaman app di Settings; tile app sistem tanpa Uninstall |
+| Cuaca dan AQI | Suhu, kode cuaca, peluang hujan, dan AQI sama dengan jawaban Open-Meteo yang dibaca langsung dari Mac |
+| Top bar | Profil membuka pemilih profil Google TV, ambient memulai Aerial Views, Settings membuka Settings, Search membuka pencarian suara |
+| Login Plex | Kode tampil, setelah dimasukkan di plex.tv/link layar menutup sendiri |
+
+Belum dicek: tombol fisik di remote (Home, tombol aplikasi, mic, menahan volume, menahan OK di tile,
+dan OK di kartu Plex), dan apakah Viu langsung masuk ke episode yang dipilih (layar pemutarnya
+terproteksi). Tombol yang dikirim lewat ADB tidak membuktikan perilaku remote fisik.
+
+### Temuan teknis
+
+- **Yang bisa dibaca launcher dari TvProvider** dengan izin `READ_TV_LISTINGS`, diukur dengan
+  `tools/tvprobe.sh`:
+
+  | Sumber | Baris channel | Isi baris (preview) | Watch Next |
   |---|---|---|---|
   | Plex | "Recommendations from Plex", "Free Movies & TV & more from Plex" | 42 item | tidak ada |
   | YouTube | "Recommended for you", "Subscriptions", "Trending", "YouTube Music" | 28 item | tidak ada |
   | Plex Channel Connect | tidak ada | tidak ada | tidak ada |
   | TV antena (`com.tcl.tvinput`) | 52 channel (TVRI dan lain-lain) | - | - |
 
-  Jadi baris rekomendasi dan subscriptions YouTube, juga rekomendasi Plex, bisa diambil tanpa
-  internet dan tanpa token. "Continue watching" dari Plex dan YouTube tidak tersedia lewat jalur ini.
-  Untuk itu perlu API Plex langsung (izin internet dan token Plex) atau tidak ditampilkan.
-  Riwayat tontonan YouTube tidak tersedia lewat API resmi sama sekali.
-- Siaran antena bisa diputar di dalam app pihak ketiga: `TvView` di probe yang disetel ke
+  Continue watching Plex tidak ada di jalur ini, jadi On Deck diambil dari API Plex. Riwayat tontonan
+  YouTube tidak tersedia lewat API resmi sama sekali. App baru menulis barisnya ke TvProvider beberapa
+  menit setelah boot.
+- **Watch Next per jenis** (`tools/tvprobe.sh` mencatat `watch_next_types`): Viu 9 CONTINUE + 7 NEXT,
+  Disney+ Hotstar 8 CONTINUE + 1 NEXT, Vidio 1 + 1, semuanya dengan posisi tonton. Jellyfin 1 NEW
+  tanpa posisi. TCL browser 30 NEW tanpa posisi (artikel dan promo). VLC 4 CONTINUE berisi nama file
+  pribadi. Karena itu Continue watching hanya mengambil CONTINUE dan NEXT, tanpa TCL browser dan VLC.
+- **Siaran antena di app pihak ketiga**: `TvView` yang disetel ke
   `com.tcl.tvinput/.TunerInputService/HW2` mendapat `onVideoAvailable`, dan Live TV bawaan tetap bisa
-  memakai tuner setelah probe ditutup. Gambarnya tidak bisa di-screencap karena konten terproteksi.
-- Channel terakhir Live TV tidak bisa dibaca langsung oleh launcher. Live TV (`com.tcl.tv`) jalan
-  dengan uid sistem dan menyimpan channel terakhirnya di penyimpanan privat. Ganti channel di Live TV
-  tidak mengubah setelan global/system/secure atau property apa pun.
-  `last_play_channel_infos.EN_TCL_DVBT` tidak ikut berubah, dan `persist.sys.livetvLatestInput`
-  hanya menyimpan input terakhir. Tabel `watched_program` di TvProvider mencatat setiap tune
-  (dari Live TV maupun launcher, ditulis oleh `com.tcl.tvinput`), tapi barisnya baru lengkap saat
-  channel ditinggal, dan tabel itu dijaga izin `ACCESS_WATCHED_PROGRAMS` (signature|privileged):
-  shell bisa membacanya, app biasa tidak, dan `pm grant` ditolak. Yang bisa dibaca adalah banner
-  channel Live TV lewat aksesibilitas (`tvCurChannelNum`, `tvCurChannelName`), yang muncul setiap
-  Live TV dibuka atau ganti channel. Sebaliknya, Live TV menuruti
-  `ACTION_VIEW content://android.media.tv/channel/<id>`, juga saat task-nya sudah terbuka.
-- Isi Watch Next per jenis (`tools/tvprobe.sh` mencatat `watch_next_types`): Viu 9 CONTINUE + 7
-  NEXT, Disney+ Hotstar 8 CONTINUE + 1 NEXT, Vidio 1 + 1, semuanya dengan posisi tonton. Jellyfin
-  1 NEW tanpa posisi. TCL browser 30 NEW tanpa posisi (artikel dan promo, bukan tontonan). VLC 4
-  CONTINUE berisi nama file pribadi. Aturan baris "Continue watching" di launcher: ambil jenis
-  CONTINUE dan NEXT saja, dan abaikan `com.tcl.browser` dan `org.videolan.vlc`.
-- Plex lewat API (server di VPS). `tools/plex-check.py` membaca token dari `plex.local`
-  (git-ignored, mode 600) dan hanya mencetak angka. Hasil dari Mac: dua server milik akun, keduanya
-  terjangkau lewat koneksi remote HTTPS (sekitar 0,8–1 detik per request), koneksi lokal tidak
-  terjangkau. Server utama: On Deck 3 item, Recently added terisi, lima library (tiga film, satu
-  serial, satu musik), poster 320×180 sekitar 36 KB. Jadi baris Plex "Continue watching" (On Deck),
-  "Recently added", dan "Movies in your library" bisa diisi dari API. Karena tiap request hampir satu
-  detik, launcher harus memuat data di belakang dan menyimpan cache, bukan menunggu saat Home dibuka.
-  Di launcher, token didapat lewat login kode PIN (plex.tv/link) dan disimpan di penyimpanan privat
-  app.
-- On Deck dihitung per user Plex. Akun ini punya tiga user Plex Home: admin (pakai PIN, tidak dipakai
-  menonton) dan dua user managed tanpa PIN. Token admin bisa pindah ke user managed lewat
-  `POST https://plex.tv/api/v2/home/users/{uuid}/switch` tanpa PIN, dan hasilnya token user itu
-  sendiri. User #2: On Deck 18 item di server utama (server kedua menolak koneksi untuk user ini).
-  User #3: 2 item. TV ini memakai user #2, user #3 untuk TV lain. Di launcher, user Plex jadi satu
-  setelan di `config.xml`, tanpa pemilih user di layar.
-- App Plex untuk TV (versi 2026.20.0, `tv.plex.app.MainActivity`) adalah app React Native; routing
-  link ada di bundle JavaScript (Hermes), bukan di kode Java-nya. Rute yang dikenalinya antara lain
-  `libraries/:serverId/movie/:slug/:key` dan `libraries/:serverId/show/…`. Link lama
-  `plex://server://<id>/com.plexapp.plugins.library/library/metadata/<key>` (yang masih Plex tulis
-  ke TvProvider, dan yang dipakai launcher Dispatch 1.0.175) berakhir di beranda Plex, baik Plex
-  sedang terbuka maupun tidak. `plex://libraries/<id>/movie/x/<key>` membuka detail item dalam
-  semua kasus yang dicoba: Plex mati, Plex di background, dan Plex sedang di detail item lain.
-  Bundle-nya punya `useAutoplayDeeplinkRedirect`: `?autoplay=1` memutar item, `&offset=<detik>`
-  mengatur posisi awal (`viewOffset`, `resume`, dan `t` diabaikan; `offset` dalam milidetik melompat
-  melewati akhir film, dan Plex lalu menandainya sudah ditonton). Klik lewat aksesibilitas
-  (`ACTION_CLICK`) maupun tap sentuh pada tombol Resume tidak memicu apa pun di Plex. Plex Companion
-  (port 32500, `/player/playback/playMedia`) tidak terbuka di TV ini. Sejak "sign in
-  automatically" aktif di Plex, "Who's watching?" tidak muncul lagi.
-- Dispatch (`com.spauldhaliwal.dispatch`) adalah app Flutter. String di `libapp.so` menunjukkan dia
-  membuka item Plex dengan `android_intent_plus` dan link `plex://server://…?viewOffset=`, plus
-  extra miliknya sendiri (`extra_detail_page`, `android.intent.extra.START_PLAYBACK`) yang tidak
-  dibaca app Plex.
-- Log yang ditulis app di `onCreate` tidak pernah muncul di logcat build ini, sedangkan log dari
-  callback muncul. Karena itu probe `live` mencatat detail penyetelan di baris callback.
-- `tools/tvprobe.sh` membangun APK probe kecil (`tools/tvprobe/`), memasangnya, memberi izin
-  `READ_TV_LISTINGS`, menjalankannya, mencetak hasil, lalu menghapusnya lagi dari TV. Yang dicatat
-  hanya jumlah baris per aplikasi, nama channel, bentuk link dan URI gambar (id dan angka disamarkan),
-  rentang `_id` program, dan hash judul per aplikasi, bukan judul tontonan. `tools/tvprobe.sh live`
-  menguji siaran antena di `TvView` selama 12 detik. Butuh JDK 17 dan Android SDK
-  (`brew install openjdk@17`, `brew install --cask android-commandlinetools`, lalu `sdkmanager
-  "platforms;android-34" "build-tools;34.0.0"`).
-- Ikon profil di launcher bisa membuka pemilih profil bawaan Google TV:
-  `am start -n com.google.android.apps.tv.launcherx/.profile.chooser.ProfileChooserActivity`
-  (sudah dicoba, layar "Choose an account" muncul). TV ini punya dua user (Owner dan satu user
-  tambahan). Layar itu milik launcherx, jadi launcherx harus tetap enabled walaupun bukan Home lagi.
-- Tombol app di remote TCL (Netflix, YouTube, Prime Video) dikirim ke launcherx. Tanpa launcherx,
-  tombol itu perlu dipetakan ulang. Di build G09 lain, service aksesibilitas yang memfilter tombol
-  membuat volume tidak bisa ditahan untuk naik terus. TV ini sudah menjalankan satu service seperti itu
-  (`tvquickactions`).
+  memakai tuner setelah app itu melepasnya.
+- **Channel terakhir Live TV** tidak bisa dibaca langsung. Live TV (`com.tcl.tv`) jalan dengan uid
+  sistem dan menyimpannya di penyimpanan privat; ganti channel tidak mengubah setelan
+  global/system/secure atau property apa pun. `last_play_channel_infos.EN_TCL_DVBT` tidak ikut
+  berubah, dan `persist.sys.livetvLatestInput` hanya menyimpan input terakhir. Tabel `watched_program`
+  di TvProvider mencatat setiap tune (dari Live TV maupun launcher, ditulis oleh `com.tcl.tvinput`),
+  tapi barisnya baru lengkap saat channel ditinggal, dan tabel itu dijaga izin
+  `ACCESS_WATCHED_PROGRAMS` (signature|privileged): shell bisa membacanya, app biasa tidak, dan `pm
+  grant` ditolak. Banner channel Live TV (`tvCurChannelNum`, `tvCurChannelName`) terbaca lewat
+  aksesibilitas setiap Live TV dibuka atau ganti channel, dan Live TV menuruti `ACTION_VIEW
+  content://android.media.tv/channel/<id>`, juga saat task-nya sudah terbuka.
+- **Plex lewat API** (server di VPS). `tools/plex-check.py` membaca token dari `plex.local` dan hanya
+  mencetak angka. Dua server milik akun, keduanya terjangkau lewat koneksi remote HTTPS (sekitar
+  0,8–1,3 detik per request); koneksi lokal tidak terjangkau. On Deck dihitung per user Plex. Akun ini
+  punya tiga user Plex Home: admin (pakai PIN, tidak dipakai menonton) dan dua user managed tanpa PIN.
+  Token admin bisa pindah ke user managed lewat `POST https://plex.tv/api/v2/home/users/{uuid}/switch`
+  tanpa PIN, dan hasilnya token user itu sendiri. TV ini memakai user #2; user #3 untuk TV lain.
+- **App Plex untuk TV** (versi 2026.20.0, `tv.plex.app.MainActivity`) adalah app React Native; routing
+  link ada di bundle JavaScript (Hermes). Rutenya antara lain `libraries/:serverId/movie/:slug/:key`
+  dan `libraries/:serverId/show/…`. Link lama `plex://server://<id>/com.plexapp.plugins.library/
+  library/metadata/<key>` (yang masih Plex tulis ke TvProvider) berakhir di beranda Plex.
+  `plex://libraries/<id>/movie/x/<key>` membuka halaman item saat Plex mati, di background, atau
+  sedang di halaman item lain; segmen `movie` dan slug `x` tidak dicek. Bundle-nya punya
+  `useAutoplayDeeplinkRedirect`: `?autoplay=1` memutar item dan `&offset=<detik>` mengatur posisi
+  awal. `viewOffset`, `resume`, dan `t` diabaikan, dan tanpa `offset` Plex memutar dari awal. `offset`
+  dalam milidetik melompat melewati akhir film, dan Plex lalu menandainya sudah ditonton. Klik lewat
+  aksesibilitas (`ACTION_CLICK`) maupun tap sentuh pada tombol Resume tidak memicu apa pun, dan
+  `findFocus()` tidak menemukan tombol yang sedang fokus. Plex Companion (port 32500,
+  `/player/playback/playMedia`) tidak terbuka di TV ini. Dengan "sign in automatically" aktif di Plex,
+  "Who's watching?" tidak muncul.
+- **Dispatch** (`com.spauldhaliwal.dispatch` 1.0.175) adalah app Flutter. String di `libapp.so`
+  menunjukkan dia membuka item Plex dengan `android_intent_plus` dan link lama
+  `plex://server://…?viewOffset=`, plus extra miliknya sendiri (`extra_detail_page`,
+  `android.intent.extra.START_PLAYBACK`) yang tidak dibaca app Plex.
+- **Pemilih profil Google TV** bisa dibuka dari app lain:
+  `am start -n com.google.android.apps.tv.launcherx/.profile.chooser.ProfileChooserActivity`. Layar itu
+  milik launcherx. Foto akun Google tidak bisa dibaca app pihak ketiga, jadi tombol profil memakai foto
+  user Plex.
+- **Tombol aplikasi di remote TCL** (Netflix, YouTube, Prime Video) dikirim ke launcherx. Di build G09
+  lain, service aksesibilitas yang memfilter tombol membuat volume tidak bisa ditahan untuk naik terus.
+  TV ini sudah menjalankan satu service seperti itu (`tvquickactions`).
+- **Log app di `onCreate`** tidak pernah muncul di logcat build ini, sedangkan log dari callback
+  muncul. Karena itu probe `live` mencatat detail penyetelan di baris callback.
+- **`tools/tvprobe.sh`** membangun APK probe kecil (`tools/tvprobe/`), memasangnya, memberi izin
+  `READ_TV_LISTINGS`, menjalankannya, mencetak hasil, lalu menghapusnya lagi dari TV. Yang dicatat hanya
+  jumlah baris per aplikasi, nama channel, bentuk link dan URI gambar (id dan angka disamarkan), rentang
+  `_id` program, dan hash judul per aplikasi, bukan judul tontonan. `tools/tvprobe.sh live` menguji
+  siaran antena di `TvView` selama 12 detik.
