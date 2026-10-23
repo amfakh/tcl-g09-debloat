@@ -9,7 +9,7 @@ import android.view.View;
 
 /**
  * Line icons for the top bar, drawn in code so the launcher needs no image files: search, picture
- * (ambient mode), gear (settings), a 3x3 grid (All apps), chevrons for moving a tile and, under the
+ * (ambient mode), gear (settings), a 3x3 grid (All apps), a house (Google TV's home), chevrons for moving a tile and, under the
  * clock, the sky and a raindrop for the chance of rain.
  * Drawn on a 24x24 grid, scaled to the view.
  */
@@ -29,6 +29,7 @@ final class Icon extends View {
     static final int GRID = 12;
     static final int CHEVRON_LEFT = 13;
     static final int CHEVRON_RIGHT = 14;
+    static final int HOME = 15;
 
     private int kind;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -130,6 +131,20 @@ final class Icon extends View {
                     canvas.drawRoundRect(new RectF(x, y, x + 4, y + 4), 1, 1, paint);
                 }
             }
+        } else if (kind == HOME) {
+            Path house = new Path();
+            house.moveTo(3.5f, 11);
+            house.lineTo(12, 4);
+            house.lineTo(20.5f, 11);
+            house.moveTo(6, 9);
+            house.lineTo(6, 20);
+            house.lineTo(18, 20);
+            house.lineTo(18, 9);
+            house.moveTo(10, 20);
+            house.lineTo(10, 14.5f);
+            house.lineTo(14, 14.5f);
+            house.lineTo(14, 20);
+            canvas.drawPath(house, paint);
         } else if (kind == CHEVRON_LEFT || kind == CHEVRON_RIGHT) {
             float tip = kind == CHEVRON_LEFT ? 8.5f : 15.5f;
             float back = kind == CHEVRON_LEFT ? 15 : 9;

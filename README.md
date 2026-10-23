@@ -258,13 +258,14 @@ sedang tampil tapi tidak difokus berisi abu `#373E42`, tombol ikon yang diam pun
 membesar, supaya tetap di dalam pill. Gradasi gelap di belakang top
 bar menjaga jam tetap kebaca di atas siaran atau gambar yang terang.
 
-**Hero.** Default-nya stage LIVE: siaran antena full-screen di belakang, nama dan nomor channel, dan
-petunjuk tombol. Fokus awal ada di pill LIVE, CH+/CH− mengganti channel, dan OK membuka Live TV
+**Hero.** Default-nya stage LIVE: siaran antena full-screen di belakang, ikon TV dari app Live TV bawaan
+TCL, nama dan nomor channel. Fokus awal ada di pill LIVE, CH+/CH− mengganti channel, dan OK membuka Live TV
 full-screen di channel yang sama. Di kanan LIVE ada tiga titik untuk tiga item pertama
 "Recommendations from Plex" (atau Recently added kalau baris itu kosong). Panah kanan pindah ke titik
 itu: hero menampilkan gambar item full-screen, logo app dan nama baris asalnya, judul, meta, dan
 deskripsi dua baris. Panah kiri kembali ke LIVE. Fokus di kartu mana pun juga mengganti hero dengan
-item kartu itu. Selama hero menampilkan item, siaran tetap jalan di belakang, suaranya juga, jadi saat
+item kartu itu, dan begitu fokus kembali ke Your apps, hero kembali ke stage (siaran kalau stage-nya
+LIVE). Selama hero menampilkan item, siaran tetap jalan di belakang, suaranya juga, jadi saat
 kembali ke LIVE siarannya langsung ada tanpa memuat channel lagi. Tuner baru dilepas saat
 TCL Home tidak tampil (aplikasi lain dibuka).
 
@@ -293,8 +294,12 @@ untuk aplikasi lain. Gambar kartu di-decode selebar kartu (320 px) dan disimpan 
 seperdelapan heap app. Gambar yang sama hanya diambil sekali walaupun baris dibangun ulang, dan gambar
 hero (1280 px) punya thread sendiri.
 
-**Aplikasi.** Baris Your apps hanya berisi favorit, ditutup garis pemisah tipis dan tile All apps
-(ikon kotak 3×3) yang membuka tab Apps. Tab Apps adalah grid 6 kolom di tengah layar dengan dua
+**Aplikasi.** Baris Your apps hanya berisi favorit, tanpa nama di bawah tile (kalau ada, cuma nama itu
+yang kelihatan di atas Continue watching saat di-scroll). Baris ditutup garis pemisah tipis, tile All
+apps (ikon kotak 3×3) yang membuka tab Apps, dan tile Google TV (ikon rumah) yang membuka launcher
+bawaan. Redirect dilewati 3 detik setelah tile itu dipilih. Selama di launcher bawaan, tombol Home
+tidak membawa balik ke TCL Home karena launcher itu sudah tampil. Buka app apa saja lalu tekan Home,
+atau buka TCL Home dari daftar app. Tab Apps adalah grid 6 kolom di tengah layar dengan dua
 bagian: Favorites (urutan sama dengan baris Your apps) dan All apps (semua app, A–Z, selalu dihitung
 ulang, jadi app baru langsung masuk di posisi abjadnya). Tahan OK di tile untuk membuka menunya:
 

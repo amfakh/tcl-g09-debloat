@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
 import android.app.AlertDialog;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -69,6 +70,7 @@ public class HomeActivity extends Activity {
     private static final String LIVE_TV_PKG = "com.tcl.tv";
     // Tag of the All apps tile that ends the Your apps row.
     private static final String ALL_APPS = "all-apps";
+    private static final String STOCK_HOME = "stock-home";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService background = Executors.newSingleThreadExecutor();
@@ -520,11 +522,8 @@ public class HomeActivity extends Activity {
     private void showLive() {
         setLive(true);
         CharSequence before = heroTitle.getText();
-        heroLogo.setImageDrawable(null);
-        GradientDrawable dot = new GradientDrawable();
-        dot.setColor(LIVE_RED);
-        dot.setShape(GradientDrawable.OVAL);
-        heroLogo.setBackground(dot);
+        heroLogo.setBackground(logoShape());
+        heroLogo.setImageDrawable(appIcon(LIVE_TV_PKG));
         heroSource.setText(R.string.live_source);
         if (live != null) {
             heroTitle.setText(live.name());
@@ -533,7 +532,7 @@ public class HomeActivity extends Activity {
             heroTitle.setText(R.string.no_tuner);
             heroMeta.setText("");
         }
-        heroDesc.setText(R.string.live_hint);
+        heroDesc.setText("");
         reveal(before);
     }
 
@@ -1278,7 +1277,7 @@ public class HomeActivity extends Activity {
     // ---- Apps -----------------------------------------------------------------------------------
 
     /**
-     * Fills the Your apps row with the favorites in their order, ending with an All apps tile, and the
+     * Fills the Your apps row with the favorites in their order, ending with All apps and Google TV, and the
      * Apps grid with a Favorites section and an All apps section A to Z. Favorites are dock_apps until
      * they are first changed from the held-OK menu. hidden_apps never show.
      */
@@ -1318,6 +1317,7 @@ public class HomeActivity extends Activity {
             appRow.addView(rule, ruleLp);
         }
         appRow.addView(allAppsTile());
+        appRow.addView(stockHomeTile());
         appsGrid.removeAllViews();
         if (!favorites.isEmpty()) {
             addGridSection(getString(R.string.grid_favorites), pm, favorites);
@@ -1376,7 +1376,8 @@ public class HomeActivity extends Activity {
         if (banner != null) {
             art.setScaleType(ImageView.ScaleType.CENTER_CROP);
         }
-        LinearLayout cell = tileShell(pkg, art, banner != null, ri.loadLabel(pm).toString());
+        // The Your apps row shows no names: scrolled down, only the names would peek above the next row.
+        LinearLayout cell = tileShell(pkg, art, banner != null, movable ? null : ri.loadLabel(pm).toString());
         cell.setOnClickListener(v -> {
             if (LIVE_TV_PKG.equals(pkg)) {
                 openLiveTv();
@@ -1402,7 +1403,7 @@ public class HomeActivity extends Activity {
     private View allAppsTile() {
         Icon art = new Icon(this, Icon.GRID);
         art.setColor(TEXT);
-        LinearLayout cell = tileShell(ALL_APPS, art, false, getString(R.string.all_apps));
+        LinearLayout cell = tileShell(ALL_APPS, art, false, null);
         cell.setOnClickListener(v -> {
             showApps(true);
             View first = firstGridTile();
@@ -1414,12 +1415,31 @@ public class HomeActivity extends Activity {
     }
 
     /**
+     * The tile after All apps that opens Google TV's own home screen, for what only it offers.
+     *
+     * @return the focusable tile
+     */
+    private View stockHomeTile() {
+        String pkg = "com.google.android.apps.tv.launcherx";
+        // Google TV's home has no icon of its own.
+        Icon art = new Icon(this, Icon.HOME);
+        art.setColor(TEXT);
+        LinearLayout cell = tileShell(STOCK_HOME, art, false, null);
+        cell.setOnClickListener(v -> {
+            HomeRedirectService.allowStockHome();
+            start(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                .setComponent(new ComponentName(pkg, getString(R.string.stock_home_activity))));
+        });
+        return cell;
+    }
+
+    /**
      * What every app tile looks like: a 16:9 card with a name under it, a ring and a lift on focus.
      *
      * @param tag the tile's tag (its package)
      * @param art what fills the card
      * @param fills whether art fills the card (a banner) rather than sitting in its middle (an icon)
-     * @param label the name under the card
+     * @param label the name under the card, or null for none
      * @return the focusable tile, without click handlers
      */
     private LinearLayout tileShell(String tag, View art, boolean fills, String label) {
@@ -1444,10 +1464,12 @@ public class HomeActivity extends Activity {
         cell.addView(card, new LinearLayout.LayoutParams(px(240), px(135)));
 
         TextView name = text(19, MUTED, false);
-        name.setText(label);
-        name.setSingleLine(true);
-        name.setPadding(px(6), px(10), 0, 0);
-        cell.addView(name, new LinearLayout.LayoutParams(px(240), -2));
+        if (label != null) {
+            name.setText(label);
+            name.setSingleLine(true);
+            name.setPadding(px(6), px(10), 0, 0);
+            cell.addView(name, new LinearLayout.LayoutParams(px(240), -2));
+        }
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
         lp.rightMargin = px(28);
@@ -1459,6 +1481,10 @@ public class HomeActivity extends Activity {
             if (has && isInside(v, rowsScroll)) {
                 lastCard = v;
                 settleRows(v);
+            }
+            if (has && v.getParent() == appRow) {
+                // Back from the content rows: the hero shows the stage again (live TV on LIVE).
+                showStage(stageSlot);
             }
             if (has && inFirstGridLine(v)) {
                 // The scroller only brings the tile itself into view; show the grid's top gap too.
@@ -1605,7 +1631,7 @@ public class HomeActivity extends Activity {
         List<String> out = new ArrayList<>();
         for (int i = 0; i < appRow.getChildCount(); i++) {
             Object tag = appRow.getChildAt(i).getTag();
-            if (tag != null && !ALL_APPS.equals(tag)) {
+            if (tag != null && !ALL_APPS.equals(tag) && !STOCK_HOME.equals(tag)) {
                 out.add((String) tag);
             }
         }

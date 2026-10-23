@@ -38,6 +38,15 @@ public class HomeRedirectService extends AccessibilityService {
     // The play link to send once Plex is ready, or null.
     private static volatile String plexPlayLink;
     private static volatile long plexPlayUntil;
+    // Until when Google TV's home, opened from Home's Google TV tile, stays on screen.
+    private static volatile long stockHomeUntil;
+    // Covers the window changes of the stock home opening; after that a new one means Home was pressed.
+    private static final long STOCK_HOME_MS = 3_000;
+
+    /** Lets Google TV's home open once, without being replaced by TCL Home. */
+    static void allowStockHome() {
+        stockHomeUntil = SystemClock.uptimeMillis() + STOCK_HOME_MS;
+    }
 
     /**
      * Sends a Plex play link once Plex is ready, within PLEX_WAIT_MS.
@@ -81,7 +90,8 @@ public class HomeRedirectService extends AccessibilityService {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             }
         } else if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-                && getString(R.string.stock_home_activity).equals(String.valueOf(event.getClassName()))) {
+                && getString(R.string.stock_home_activity).equals(String.valueOf(event.getClassName()))
+                && SystemClock.uptimeMillis() >= stockHomeUntil) {
             openHome();
         }
     }
