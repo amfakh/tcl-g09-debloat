@@ -55,6 +55,8 @@ public class HomeActivity extends Activity {
     private static final long CLOCK_TICK_MS = 15_000;
     private static final long TV_ROWS_SETTLE_MS = 2_000;
     private static final long PLEX_RETRY_MS = 15_000;
+    // How much of the rows above and below the focused row shows, in 1080p design pixels.
+    private static final int ROW_PEEK = 44;
     private static final int TEXT = Color.rgb(241, 243, 244);
     private static final int MUTED = Color.rgb(168, 171, 177);
     private static final int BG = Color.rgb(15, 16, 18);
@@ -120,6 +122,8 @@ public class HomeActivity extends Activity {
     private LinearLayout rowsBottom;
     private LinearLayout appRow;
     private View appSection;
+    // The column of row sections inside rowsScroll.
+    private LinearLayout rowsContent;
     // The app tile being moved along the row (held OK on it), or null.
     private View movingTile;
     // Set when OK or Back ended a move, so its key-up does not also open the app.
@@ -255,6 +259,9 @@ public class HomeActivity extends Activity {
         rows.setOrientation(LinearLayout.VERTICAL);
         rows.setClipChildren(false);
         rowsScroll.addView(rows);
+        rowsContent = rows;
+        // Room under the last row, so it too can sit at the same place as every other row.
+        rows.setPadding(0, 0, 0, px(ROW_PEEK));
         LinearLayout.LayoutParams rowsLp = new LinearLayout.LayoutParams(-1, 0);
         rowsLp.topMargin = px(20);
         home.addView(rowsScroll, rowsLp);
@@ -350,27 +357,36 @@ public class HomeActivity extends Activity {
     }
 
     /**
-     * Shows the rows in full, or only the apps row under the hero (the default view, so live TV or the
-     * pick fills most of the screen) with the next row's title and the top of its cards peeking at the
-     * bottom edge, as a hint that there is more below.
+     * Shows the rows area for one content row with a peek of its neighbors (focus in the content rows),
+     * or only the apps row under the hero (the default view, so live TV or the pick fills most of the
+     * screen) with the next row's title and the top of its cards peeking at the bottom edge, as a hint
+     * that there is more below.
      *
      * @param expanded true while focus is in the content rows
      */
     private void setRowsExpanded(boolean expanded) {
         LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) rowsScroll.getLayoutParams();
-        int height = Math.round(getResources().getDisplayMetrics().heightPixels * 0.42f);
-        if (!expanded) {
+        int height;
+        if (expanded) {
+            // One content row with a small peek of the rows above and below it.
+            View sample = rowsTop.getChildCount() > 0 ? rowsTop.getChildAt(0)
+                : rowsBottom.getChildCount() > 0 ? rowsBottom.getChildAt(0) : appSection;
+            sample.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            height = rowsScroll.getPaddingTop() + px(ROW_PEEK) + sample.getMeasuredHeight() + px(ROW_PEEK);
+        } else {
             appSection.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
             height = rowsScroll.getPaddingTop() + appSection.getMeasuredHeight() + px(96);
         }
         int bottom = 0;
+        // Set first: both sizes can come out the same, and the scroll pin depends on this.
+        rowsExpanded = expanded;
         if (lp.height == height && lp.bottomMargin == bottom) {
             return;
         }
         lp.height = height;
         lp.bottomMargin = bottom;
-        rowsExpanded = expanded;
         rowsScroll.setLayoutParams(lp);
         if (!expanded) {
             rowsScroll.scrollTo(0, 0);
@@ -720,6 +736,11 @@ public class HomeActivity extends Activity {
         if (event.getAction() == KeyEvent.ACTION_DOWN && !showingApps) {
             View f = getCurrentFocus();
             int key = event.getKeyCode();
+            if (f != null && key == KeyEvent.KEYCODE_DPAD_DOWN && isInside(f, rowsScroll)
+                    && f.focusSearch(View.FOCUS_DOWN) == null) {
+                // The last row: nothing to move to, and the scroller would only nudge the rows.
+                return true;
+            }
             if (f != null && key == KeyEvent.KEYCODE_DPAD_UP && inTopRow(f)) {
                 lastCard = f;
                 stageDots[stageSlot].requestFocus();
@@ -773,6 +794,50 @@ public class HomeActivity extends Activity {
             return true;
         }
         return super.onKeyDown(keyCode, event);
+    }
+
+    /**
+     * Places the rows around a focused card or app: its row scrolls so the card stays clear of the row's
+     * edges (a focused card is enlarged and its ring would be cut), back to the start for the first
+     * card; and, while all rows show, the focused row always sits at the same place, a ROW_PEEK below
+     * the top, with a peek of the rows above and below it. Runs after the scrollers' own scroll to the
+     * focused view.
+     *
+     * @param v the focused card or app tile
+     */
+    private void settleRows(View v) {
+        v.post(() -> {
+            View row = (View) v.getParent();
+            if (row != null && row.getParent() instanceof HorizontalScrollView) {
+                HorizontalScrollView h = (HorizontalScrollView) row.getParent();
+                int margin = px(40);
+                int x = row.getLeft() + v.getLeft() - h.getScrollX();
+                if (((ViewGroup) row).indexOfChild(v) == 0) {
+                    h.smoothScrollTo(0, 0);
+                } else if (x < margin) {
+                    h.smoothScrollBy(x - margin, 0);
+                } else if (x + v.getWidth() > h.getWidth() - margin) {
+                    h.smoothScrollBy(x + v.getWidth() - (h.getWidth() - margin), 0);
+                }
+            }
+            if (!rowsExpanded) {
+                return;
+            }
+            // The section holding v: a child of rowsTop, rowsBottom or (the apps) of rowsContent.
+            View section = v;
+            while (section.getParent() != rowsTop && section.getParent() != rowsBottom
+                    && section.getParent() != rowsContent) {
+                if (!(section.getParent() instanceof View)) {
+                    return;
+                }
+                section = (View) section.getParent();
+            }
+            int top = 0;
+            for (View x = section; x != rowsContent; x = (View) x.getParent()) {
+                top += x.getTop();
+            }
+            rowsScroll.smoothScrollTo(0, Math.max(0, top - px(ROW_PEEK)));
+        });
     }
 
     /**
@@ -1170,6 +1235,7 @@ public class HomeActivity extends Activity {
             if (has) {
                 lastCard = v;
                 showItem(item, rowTitle);
+                settleRows(v);
             }
         });
         card.setOnClickListener(v -> open(item));
@@ -1392,6 +1458,7 @@ public class HomeActivity extends Activity {
             name.setTextColor(has ? TEXT : MUTED);
             if (has && isInside(v, rowsScroll)) {
                 lastCard = v;
+                settleRows(v);
             }
             if (has && inFirstGridLine(v)) {
                 // The scroller only brings the tile itself into view; show the grid's top gap too.

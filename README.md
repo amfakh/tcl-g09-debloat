@@ -280,7 +280,11 @@ ke 1; bawaannya 0,5).
 you, Recently added, YouTube Subscriptions, Movies in your library. Tampilan default cuma hero, baris
 Your apps, dan sedikit intipan Continue watching di tepi bawah layar sebagai tanda masih bisa
 di-scroll. Baris lain terbuka saat fokus turun ke Continue watching, dan tertutup lagi saat fokus naik
-ke Your apps atau stage.
+ke Your apps atau stage. Saat terbuka, area baris setinggi satu baris plus intipan kecil di atas dan
+bawahnya, dan baris yang difokus selalu berada di posisi yang sama, judulnya ikut terlihat. Baris
+terakhir diberi ruang kosong di bawahnya supaya tetap di posisi itu, dan Down di baris terakhir tidak
+melakukan apa-apa. Di dalam baris, kartu yang difokus dijaga agak jauh dari tepi kiri dan kanan
+supaya cincin fokusnya tidak terpotong.
 
 **Kartu.** Baris dari satu app punya logo app itu di kiri judulnya; Continue watching, yang isinya
 campuran, tanpa logo. Kartu Plex menampilkan tahun di kiri atas. Di kanan atas ada badge sisa waktu,
