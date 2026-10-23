@@ -124,7 +124,7 @@ final class Plex {
      * @param homeUser 1-based position of the user in the account's Plex Home list
      * @param path ON_DECK or RECENTLY_ADDED; null for the first movie library
      * @return the items; empty when signed out
-     * @throws IOException when plex.tv cannot be reached at all
+     * @throws IOException when plex.tv cannot be reached, or no server answered
      */
     List<TvRows.Item> items(int homeUser, String path) throws IOException {
         List<TvRows.Item> items = new ArrayList<>();
@@ -157,8 +157,10 @@ final class Plex {
             }
         }
         if (anyFailed && items.isEmpty()) {
-            // Addresses or tokens went stale (a server moved, a token was revoked): look them up again next time.
+            // Offline, or addresses or tokens went stale (a server moved, a token was revoked): look them
+            // up again next time.
             prefs.edit().remove(KEY_SERVERS).remove(KEY_USER).apply();
+            throw new IOException("no Plex server answered");
         }
         return items;
     }

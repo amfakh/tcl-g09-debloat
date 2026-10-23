@@ -51,6 +51,7 @@ import java.util.concurrent.Executors;
 public class HomeActivity extends Activity {
     private static final long CLOCK_TICK_MS = 15_000;
     private static final long TV_ROWS_SETTLE_MS = 2_000;
+    private static final long PLEX_RETRY_MS = 15_000;
     private static final int TEXT = Color.rgb(241, 243, 244);
     private static final int MUTED = Color.rgb(168, 171, 177);
     private static final int BG = Color.rgb(15, 16, 18);
@@ -122,6 +123,9 @@ public class HomeActivity extends Activity {
     private View lastCard;
 
     private final Runnable reloadTvRows = () -> loadRows(false);
+    private final Runnable retryPlexRows = () -> loadRows(true);
+    // Whether Home is on screen: Plex rows are only retried then.
+    private boolean resumed;
     // An app writes its rows one program at a time: wait for the writes to settle before reading them.
     private final ContentObserver tvRowsChanged = new ContentObserver(handler) {
         /**
@@ -267,6 +271,7 @@ public class HomeActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        resumed = true;
         HomeRedirectService.cancelPlexPlay();
         tick.run();
         loadApps();
@@ -288,6 +293,8 @@ public class HomeActivity extends Activity {
         }
         handler.removeCallbacks(tick);
         handler.removeCallbacks(reloadTvRows);
+        handler.removeCallbacks(retryPlexRows);
+        resumed = false;
         getContentResolver().unregisterContentObserver(tvRowsChanged);
         setLive(false);
         super.onPause();
@@ -759,7 +766,8 @@ public class HomeActivity extends Activity {
 
     /**
      * Reads the TV provider rows off the main thread and shows them, then the Plex rows from the
-     * server, which take a second or more each, showing the rows again as each arrives.
+     * server, which take a second or more each, showing the rows again as each arrives. When the Plex
+     * server cannot be reached, it tries again every PLEX_RETRY_MS while Home is on screen.
      *
      * @param plexRows whether to read the Plex rows from the server too, not just the TV provider
      */
@@ -808,7 +816,13 @@ public class HomeActivity extends Activity {
                     showRows();
                 });
             } catch (Exception e) {
-                // Server or plex.tv unreachable: keep the last Plex rows on screen.
+                // Server or plex.tv unreachable (right after boot the network is not up yet): keep the
+                // last Plex rows on screen and try again while Home shows.
+                handler.post(() -> {
+                    if (resumed) {
+                        handler.postDelayed(retryPlexRows, PLEX_RETRY_MS);
+                    }
+                });
             }
         });
     }
