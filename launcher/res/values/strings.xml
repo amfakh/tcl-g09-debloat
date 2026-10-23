@@ -11,7 +11,6 @@
     <string name="plex_waiting">Waiting for the code to be entered…</string>
     <string name="plex_signed_in">Signed in. Your On Deck will show in Continue watching.</string>
     <string name="plex_offline">plex.tv cannot be reached. Trying again…</string>
-    <string name="live_badge">LIVE</string>
     <string name="live_source">Live TV</string>
     <string name="row_recently_added">Recently added</string>
     <string name="row_movies">Movies in your library</string>

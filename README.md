@@ -233,7 +233,8 @@ Ubah lewat `launcher/res/values/config.xml`, lalu jalankan `tools/build-install.
 | `youtube_package`, `youtube_rows` | Channel YouTube di TvProvider yang jadi baris, berurutan |
 | `stock_home_activity` | Home Google TV yang dialihkan ke TCL Home |
 | `plex_enabled` | Baris dari API Plex: On Deck di Continue watching, Recently added, Movies in your library |
-| `plex_recommendations` | Nama channel Plex di TvProvider, untuk barisnya dan tiga pilihan di samping LIVE |
+| `plex_recommendations` | Nama channel Plex di TvProvider untuk baris Recommendations from Plex |
+| `spotify_package`, `spotify_row` | Channel Spotify di TvProvider yang jadi baris Spotify |
 | `plex_home_user` | User Plex Home yang dipakai, posisi di daftar Plex Home (2 di TV ini). Harus user tanpa PIN |
 | `weather_latitude`, `weather_longitude` | Lokasi cuaca dan kualitas udara, koordinat tingkat kota (dua desimal) |
 
@@ -258,36 +259,40 @@ sedang tampil tapi tidak difokus berisi abu `#373E42`, tombol ikon yang diam pun
 membesar, supaya tetap di dalam pill. Gradasi gelap di belakang top
 bar menjaga jam tetap kebaca di atas siaran atau gambar yang terang.
 
-**Hero.** Default-nya stage LIVE: siaran antena full-screen di belakang, ikon TV dari app Live TV bawaan
-TCL, nama dan nomor channel. Fokus awal ada di pill LIVE, CH+/CH− mengganti channel, dan OK membuka Live TV
-full-screen di channel yang sama. Di kanan LIVE ada tiga titik untuk tiga item pertama
-"Recommendations from Plex" (atau Recently added kalau baris itu kosong). Panah kanan pindah ke titik
-itu: hero menampilkan gambar item full-screen, logo app dan nama baris asalnya, judul, meta, dan
-deskripsi dua baris. Panah kiri kembali ke LIVE. Fokus di kartu mana pun juga mengganti hero dengan
-item kartu itu, dan begitu fokus kembali ke Your apps, hero kembali ke stage (siaran kalau stage-nya
-LIVE). Selama hero menampilkan item, siaran tetap jalan di belakang, suaranya juga, jadi saat
-kembali ke LIVE siarannya langsung ada tanpa memuat channel lagi. Tuner baru dilepas saat
-TCL Home tidak tampil (aplikasi lain dibuka).
+**Hero.** Hero selalu siaran antena full-screen di belakang, dengan ikon TV dari app Live TV bawaan
+TCL, nama dan nomor channel. Fokus awal ada di tile pertama Your apps (TV), CH+/CH− mengganti channel
+selama siaran tampil, dan OK di tile TV membuka Live TV full-screen di channel yang sama. Fokus di
+kartu mana pun mengganti hero dengan item kartu itu: gambar item full-screen, logo app dan nama baris
+asalnya, judul, meta, dan deskripsi dua baris. Begitu fokus kembali ke Your apps, hero kembali ke
+siaran. Selama hero menampilkan item, siaran tetap jalan di belakang, suaranya juga, jadi siarannya
+langsung ada tanpa memuat channel lagi. Tuner baru dilepas saat TCL Home tidak tampil (aplikasi lain
+dibuka).
 
 **Animasi.** Lapisan gelap berisi gambar hero fade masuk di atas siaran saat pindah ke item, dan fade
-keluar saat kembali ke LIVE. Gambar hero berganti dengan crossfade (dua `ImageView` bergantian), dan
+keluar saat kembali ke siaran. Gambar hero berganti dengan crossfade (dua `ImageView` bergantian), dan
 teks hero fade sambil naik sedikit setiap item berganti. Gambar kartu yang baru selesai diunduh fade
 masuk; yang sudah ada di cache langsung tampil. Tab Home dan Apps berganti dengan crossfade. Kartu dan tile
 membesar saat difokus. Warna pill di top bar (Search, Home, Apps, ambient, Settings) berganti dengan
 transisi, juga saat fokus naik dari kartu ke top bar. Durasinya 200–320 ms, dikali skala animasi sistem (di TV ini sudah disetel
 ke 1; bawaannya 0,5).
 
-**Baris.** Urutannya: Your apps, Continue watching, Recommendations from Plex, YouTube Recommended for
-you, Recently added, YouTube Subscriptions, Movies in your library. Tampilan default cuma hero, baris
+**Baris.** Your apps dan Continue watching selalu paling atas. Baris di bawahnya (Recommendations from
+Plex, YouTube Recommended for you, Recently added, YouTube Subscriptions, Spotify, Movies in your
+library) diurutkan dari app yang terakhir dipakai: waktu app atau kartunya terakhir dibuka dari TCL
+Home, atau waktu terakhir nonton di Continue watching, mana yang lebih baru. App yang dibuka lewat
+jalan lain tanpa ditonton tidak menggeser urutan. Kalau waktunya sama (atau belum pernah dipakai),
+urutannya seperti daftar di atas. Urutan dihitung ulang setiap baris dibangun, jadi baru berubah saat
+kembali ke Home dari app lain. Tampilan default cuma hero, baris
 Your apps, dan sedikit intipan Continue watching di tepi bawah layar sebagai tanda masih bisa
 di-scroll. Baris lain terbuka saat fokus turun ke Continue watching, dan tertutup lagi saat fokus naik
-ke Your apps atau stage. Saat terbuka, area baris setinggi satu baris plus intipan kecil di atas dan
+ke Your apps. Saat terbuka, area baris setinggi satu baris plus intipan kecil di atas dan
 bawahnya, dan baris yang difokus selalu berada di posisi yang sama, judulnya ikut terlihat. Baris
 terakhir diberi ruang kosong di bawahnya supaya tetap di posisi itu, dan Down di baris terakhir tidak
 melakukan apa-apa. Di dalam baris, kartu yang difokus dijaga agak jauh dari tepi kiri dan kanan
 supaya cincin fokusnya tidak terpotong.
 
-**Kartu.** Baris dari satu app punya logo app itu di kiri judulnya; Continue watching, yang isinya
+**Kartu.** Kartu berukuran 16:9, kecuali Spotify yang kotak mengikuti cover playlist dan podcast-nya.
+Baris dari satu app punya logo app itu di kiri judulnya; Continue watching, yang isinya
 campuran, tanpa logo. Kartu Plex menampilkan tahun di kiri atas. Di kanan atas ada badge sisa waktu,
 "Next", atau durasi, dan di bawah ada progress bar: oranye untuk Plex, merah untuk YouTube, putih
 untuk aplikasi lain. Gambar kartu di-decode selebar kartu (320 px) dan disimpan di cache memori
@@ -314,13 +319,13 @@ sistem. Move menandai tile dengan ring kuning dan chevron di atas gradasi gelap 
 card, hanya ke arah yang masih bisa dituju. Kiri/kanan menggeser tile di antara favorit (tidak bisa
 melewati tile All apps), lalu OK atau Back menyimpan.
 
-**Navigasi.** Atas dari Your apps ke stage, atas dari stage ke tab aktif, bawah dari top bar ke stage,
-bawah dari stage ke kartu terakhir yang difokus (atau aplikasi pertama).
+**Navigasi.** Atas dari Your apps ke tab aktif, bawah dari top bar ke kartu terakhir yang difokus (atau
+aplikasi pertama).
 
 ### Live TV
 
-Channel di LIVE ikut channel yang terakhir ditonton, baik di Home maupun di Live TV. Ganti channel di
-Live TV lalu tekan Home, dan siaran di Home lanjut di channel itu. Sebaliknya, OK di LIVE dan tile TV
+Channel di hero ikut channel yang terakhir ditonton, baik di Home maupun di Live TV. Ganti channel di
+Live TV lalu tekan Home, dan siaran di Home lanjut di channel itu. Sebaliknya, tile TV
 membuka Live TV di channel yang sedang diputar Home. Live TV yang dibuka lewat jalan lain (misalnya
 tombol input di remote) mulai dari catatannya sendiri, lalu Home yang ikut. Catatannya disimpan
 sebagai nomor channel: ditulis setiap Home ganti channel, dan oleh `HomeRedirectService` dari banner
@@ -415,13 +420,14 @@ Lewat `dumpsys`, struktur UI dari `uiautomator`, dan screenshot (22–23 Oktober
 | Tekan Home dari Settings atau YouTube | TCL Home |
 | Reboot | TCL Home tampil sekitar 30 detik setelah perintah reboot |
 | Standby lalu nyala lagi | TCL Home, siaran lanjut di channel terakhir |
-| Fokus awal dan CH+/CH− | Pill LIVE dengan siaran jalan; `1 TVRI Nasional` → `2 TVRI DKI HD` → kembali |
-| Stage | Kanan dari LIVE ke titik pick (hero berisi gambar dan deskripsi), kiri kembali ke LIVE |
-| Siaran di belakang | Sesi TV input sama persis di LIVE, titik pick, kartu, dan kembali ke LIVE (tidak tune ulang) |
+| Fokus awal dan CH+/CH− | Tile TV dengan siaran jalan; `RCTI HD` → `MNCTV HD` → kembali |
+| Navigasi | Continue watching → atas ke Your apps (hero kembali ke siaran) → atas ke tab Home → bawah ke tile TV |
+| Siaran di belakang | Sesi TV input sama persis di siaran, kartu, dan kembali ke siaran (tidak tune ulang) |
 | Kemulusan (gfxinfo, jalur tombol yang sama) | Tanpa animasi: 113 frame, 49% janky, median 23 ms. Dengan animasi: 264 frame, 26% janky, median 31 ms, p90 sama 46 ms |
-| Baris | Ketujuh baris ada sesuai urutan; tampilan default hero + Your apps + intipan Continue watching |
+| Urutan baris | Setelah Spotify dibuka dari Your apps: Continue watching, Spotify, Recommendations from Plex, Recently added, Movies, YouTube Recommended for you, Subscriptions |
+| Baris | Kedelapan baris ada, kartu Spotify kotak; tampilan default hero + Your apps + intipan Continue watching |
 | Channel Live TV → Home | Live TV pindah ke 20, Home lalu memutar CH 20 |
-| Channel Home → Live TV | Home di 21, tile TV dan OK di LIVE membuka Live TV di 21 |
+| Channel Home → Live TV | Home di 21, tile TV membuka Live TV di 21 |
 | Kartu Plex, Plex belum jalan | Film diputar mulai dari posisi resume-nya (sekitar menit ke-74) |
 | Kartu Plex, Plex di background | Kartu rekomendasi diputar dari detik 1.070, posisi resume-nya |
 | Kartu Plex setelah reboot | Halaman item lalu link autoplay 11 detik kemudian, player Plex terbuka |

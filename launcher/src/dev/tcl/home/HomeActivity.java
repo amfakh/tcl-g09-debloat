@@ -38,7 +38,7 @@ import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -49,8 +49,8 @@ import java.util.concurrent.Executors;
 
 /**
  * Home screen, laid out like Google TV (see the MagicPath design): a top bar, a hero that shows live
- * antenna TV (the LIVE stage) or three picks from Plex, and rows below. Moving into the rows swaps the
- * live picture for the focused card's artwork, title and description.
+ * antenna TV, and rows below. Moving into the rows swaps the live picture for the focused card's
+ * artwork, title and description.
  */
 public class HomeActivity extends Activity {
     private static final long CLOCK_TICK_MS = 15_000;
@@ -63,7 +63,6 @@ public class HomeActivity extends Activity {
     private static final int BG = Color.rgb(15, 16, 18);
     private static final int PLEX = Color.rgb(229, 160, 13);
     private static final int YOUTUBE = Color.rgb(255, 0, 51);
-    private static final int LIVE_RED = Color.rgb(232, 69, 60);
     private static final int GRID_COLUMNS = 6;
     private static final int MOVE_RING = Color.rgb(0xff, 0xe5, 0x99);
     private static final String PLEX_PKG = "com.plexapp.android";
@@ -91,6 +90,7 @@ public class HomeActivity extends Activity {
     private List<TvRows.Item> plexOnDeck = new ArrayList<>();
     private List<TvRows.Item> plexRecent = new ArrayList<>();
     private List<TvRows.Item> plexMovies = new ArrayList<>();
+    private List<TvRows.Item> spotify = new ArrayList<>();
     private String[] youtubeRows;
 
     // Over live TV: a dark layer holding two artwork views that take turns, for crossfades.
@@ -103,9 +103,6 @@ public class HomeActivity extends Activity {
     private TextView heroTitle;
     private TextView heroMeta;
     private TextView heroDesc;
-    private final View[] stageDots = new View[4];
-    private int stageSlot;
-    private List<TvRows.Item> picks = Collections.emptyList();
 
     private TextView clock;
     private Icon weatherIcon;
@@ -139,7 +136,6 @@ public class HomeActivity extends Activity {
     private View appsTab;
     private boolean showingApps;
     private View topBarView;
-    private View stageView;
     // Card left when Up moved out of the rows, so Down returns to it.
     private View lastCard;
 
@@ -183,7 +179,7 @@ public class HomeActivity extends Activity {
 
     /**
      * Builds the screen in code: the background layer (live TV or the hero artwork), scrims, then the
-     * top bar, the hero with its stage, and the rows.
+     * top bar, the hero, and the rows.
      *
      * @param savedInstanceState unused
      */
@@ -306,7 +302,7 @@ public class HomeActivity extends Activity {
         });
     }
 
-    /** Back to the LIVE stage with focus on it, then refreshes the apps and every row. */
+    /** Back to live TV with focus on the first app, then refreshes the apps and every row. */
     @Override
     protected void onResume() {
         super.onResume();
@@ -315,12 +311,15 @@ public class HomeActivity extends Activity {
         tick.run();
         loadApps();
         loadRows(true);
+        View first = firstCard();
         // Apps rewrite their rows a few seconds after they close (YouTube does): show the new copy.
         getContentResolver().registerContentObserver(TvContract.PreviewPrograms.CONTENT_URI, true, tvRowsChanged);
         getContentResolver().registerContentObserver(TvContract.WatchNextPrograms.CONTENT_URI, true, tvRowsChanged);
         if (!showingApps) {
-            showStage(0);
-            stageDots[0].requestFocus();
+            showLive();
+            if (first != null) {
+                first.requestFocus();
+            }
         }
     }
 
@@ -345,7 +344,7 @@ public class HomeActivity extends Activity {
     }
 
     /**
-     * Home pressed while Home is already showing: back to the Home tab, the LIVE stage, rows at the top.
+     * Home pressed while Home is already showing: back to the Home tab, live TV, rows at the top.
      *
      * @param intent the HOME intent
      */
@@ -354,8 +353,11 @@ public class HomeActivity extends Activity {
         super.onNewIntent(intent);
         showApps(false);
         rowsScroll.scrollTo(0, 0);
-        showStage(0);
-        stageDots[0].requestFocus();
+        showLive();
+        View first = firstCard();
+        if (first != null) {
+            first.requestFocus();
+        }
     }
 
     /**
@@ -395,11 +397,10 @@ public class HomeActivity extends Activity {
         }
     }
 
-    // ---- Hero and stage -------------------------------------------------------------------------
+    // ---- Hero -------------------------------------------------------------------------------
 
     /**
-     * The hero: where it comes from, a large title, a meta line and a description, with the stage
-     * (LIVE and three Plex picks) at the bottom right.
+     * The hero: where it comes from, a large title, a meta line and a description.
      *
      * @return the hero block
      */
@@ -438,87 +439,10 @@ public class HomeActivity extends Activity {
         descLp.topMargin = px(12);
         texts.addView(heroDesc, descLp);
         row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        LinearLayout stage = new LinearLayout(this);
-        stage.setGravity(Gravity.CENTER_VERTICAL);
-        stage.setClipChildren(false);
-        stageView = stage;
-        for (int i = 0; i < stageDots.length; i++) {
-            stageDots[i] = stageDot(i);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-            lp.leftMargin = i == 0 ? 0 : px(10);
-            stage.addView(stageDots[i], lp);
-        }
-        lockRightEdge(stage);
-        row.addView(stage, new LinearLayout.LayoutParams(-2, -2));
         return row;
     }
 
-    /**
-     * One stage button: the LIVE pill or a dot for a Plex pick, with a ring while focused.
-     *
-     * @param slot 0 for LIVE, 1-3 for the picks
-     * @return the focusable button
-     */
-    private View stageDot(int slot) {
-        FrameLayout ring = new FrameLayout(this);
-        ring.setFocusable(true);
-        ring.setPadding(px(6), px(6), px(6), px(6));
-        GradientDrawable ringBg = new GradientDrawable();
-        ringBg.setCornerRadius(px(30));
-        ring.setBackground(ringBg);
-        View inner;
-        if (slot == 0) {
-            TextView pill = text(18, Color.WHITE, true);
-            pill.setText(R.string.live_badge);
-            pill.setPadding(px(16), px(4), px(16), px(4));
-            inner = pill;
-            ring.addView(pill);
-        } else {
-            inner = new View(this);
-            ring.addView(inner, new FrameLayout.LayoutParams(px(22), px(22)));
-        }
-        GradientDrawable fill = new GradientDrawable();
-        fill.setCornerRadius(px(20));
-        inner.setBackground(fill);
-        ring.setTag(fill);
-        ring.setOnFocusChangeListener((v, has) -> {
-            ringBg.setStroke(has ? px(4) : 0, TEXT);
-            if (has) {
-                showStage(slot);
-            }
-        });
-        ring.setOnClickListener(v -> {
-            if (slot == 0) {
-                openLiveTv();
-            } else if (slot - 1 < picks.size()) {
-                open(picks.get(slot - 1));
-            }
-        });
-        return ring;
-    }
-
-    /**
-     * Shows the stage slot in the hero: live TV, or one of the Plex picks.
-     *
-     * @param slot 0 for LIVE, 1-3 for the picks
-     */
-    private void showStage(int slot) {
-        stageSlot = slot;
-        for (int i = 0; i < stageDots.length; i++) {
-            GradientDrawable fill = (GradientDrawable) stageDots[i].getTag();
-            boolean on = i == slot;
-            fill.setColor(i == 0 ? (on ? LIVE_RED : Color.argb(90, 241, 243, 244)) : (on ? TEXT : Color.argb(90, 241, 243, 244)));
-            stageDots[i].setVisibility(i == 0 || i - 1 < picks.size() ? View.VISIBLE : View.GONE);
-        }
-        if (slot == 0 || slot - 1 >= picks.size()) {
-            showLive();
-        } else {
-            showItem(picks.get(slot - 1), getString(R.string.plex_recommendations));
-        }
-    }
-
-    /** The LIVE stage: the antenna channel full screen, its name in the hero. */
+    /** Live TV: the antenna channel full screen, its name in the hero. */
     private void showLive() {
         setLive(true);
         CharSequence before = heroTitle.getText();
@@ -703,9 +627,8 @@ public class HomeActivity extends Activity {
     // ---- Keys -----------------------------------------------------------------------------------
 
     /**
-     * Moving an app tile while one is held, and vertical moves between the bands, in the order top bar,
-     * stage, rows. Plain geometric focus search misses the small stage and the top bar from cards far
-     * to the right.
+     * Moving an app tile while one is held, and vertical moves between the top bar and the rows. Plain
+     * geometric focus search misses the top bar from cards far to the right.
      *
      * @param event the key event
      * @return true when handled here
@@ -742,18 +665,10 @@ public class HomeActivity extends Activity {
             }
             if (f != null && key == KeyEvent.KEYCODE_DPAD_UP && inTopRow(f)) {
                 lastCard = f;
-                stageDots[stageSlot].requestFocus();
-                return true;
-            }
-            if (f != null && key == KeyEvent.KEYCODE_DPAD_UP && isInside(f, stageView)) {
                 homeTab.requestFocus();
                 return true;
             }
             if (f != null && key == KeyEvent.KEYCODE_DPAD_DOWN && isInside(f, topBarView)) {
-                stageDots[stageSlot].requestFocus();
-                return true;
-            }
-            if (f != null && key == KeyEvent.KEYCODE_DPAD_DOWN && isInside(f, stageView)) {
                 View target = lastCard != null && lastCard.isAttachedToWindow() && lastCard.isShown() ? lastCard : firstCard();
                 if (target != null) {
                     target.requestFocus();
@@ -921,6 +836,8 @@ public class HomeActivity extends Activity {
         Set<String> excluded = new HashSet<>(Arrays.asList(getResources().getStringArray(R.array.watch_next_excluded)));
         String ytPkg = getString(R.string.youtube_package);
         String recsName = getString(R.string.plex_recommendations);
+        String spotifyPkg = getString(R.string.spotify_package);
+        String spotifyName = getString(R.string.spotify_row);
         boolean plexOn = getResources().getBoolean(R.bool.plex_enabled);
         int plexUser = getResources().getInteger(R.integer.plex_home_user);
         background.execute(() -> {
@@ -930,10 +847,12 @@ public class HomeActivity extends Activity {
             for (String name : youtubeRows) {
                 yt.add(TvRows.channel(this, ytPkg, name));
             }
+            List<TvRows.Item> sp = TvRows.channel(this, spotifyPkg, spotifyName);
             handler.post(() -> {
                 watchNext = wn;
                 plexRecs = recs;
                 youtube = yt;
+                spotify = sp;
                 showRows();
             });
             if (!plexOn || !plex.signedIn()) {
@@ -974,9 +893,11 @@ public class HomeActivity extends Activity {
     }
 
     /**
-     * Rebuilds the content rows in the design's order, keeping the focused card when it is still there:
-     * (after the apps) Continue watching, Recommendations from Plex, YouTube's first row, Recently
-     * added, YouTube's second row and Movies in your library.
+     * Rebuilds the content rows, keeping the focused card when it is still there. Continue watching
+     * always comes first (after the apps). The rows below it are ordered by when their app was last
+     * used (see lastUsed), most recent first; rows of apps used at the same time keep the design's
+     * order: Recommendations from Plex, YouTube's first row, Recently added, YouTube's second row,
+     * Spotify and Movies in your library.
      */
     private void showRows() {
         View focused = getCurrentFocus();
@@ -985,32 +906,35 @@ public class HomeActivity extends Activity {
         boolean lastWasCard = lastCard != null && (isInside(lastCard, rowsTop) || isInside(lastCard, rowsBottom));
         Object lastTag = lastWasCard ? lastCard.getTag() : null;
 
-        picks = plexRecs.size() > 0 ? plexRecs.subList(0, Math.min(3, plexRecs.size()))
-            : plexRecent.subList(0, Math.min(3, plexRecent.size()));
         rowsTop.removeAllViews();
         rowsBottom.removeAllViews();
         String ytPkg = getString(R.string.youtube_package);
-        addRow(rowsTop, getString(R.string.row_continue), null, continueItems(), true);
-        addRow(rowsBottom, getString(R.string.plex_recommendations), PLEX_PKG, plexRecs, false);
+        List<TvRows.Item> continueItems = continueItems();
+        addRow(rowsTop, getString(R.string.row_continue), null, continueItems, true);
+        // Title, app and items of each row below Continue watching, in the design's order.
+        List<Object[]> below = new ArrayList<>();
+        below.add(new Object[] {getString(R.string.plex_recommendations), PLEX_PKG, plexRecs});
         if (youtubeRows.length > 0 && youtube.size() > 0) {
-            addRow(rowsBottom, youtubeRows[0], ytPkg, youtube.get(0), false);
+            below.add(new Object[] {youtubeRows[0], ytPkg, youtube.get(0)});
         }
-        addRow(rowsBottom, getString(R.string.row_recently_added), PLEX_PKG, plexRecent, false);
+        below.add(new Object[] {getString(R.string.row_recently_added), PLEX_PKG, plexRecent});
         for (int i = 1; i < youtubeRows.length && i < youtube.size(); i++) {
-            addRow(rowsBottom, youtubeRows[i], ytPkg, youtube.get(i), false);
+            below.add(new Object[] {youtubeRows[i], ytPkg, youtube.get(i)});
         }
-        addRow(rowsBottom, getString(R.string.row_movies), PLEX_PKG, plexMovies, false);
+        below.add(new Object[] {getString(R.string.spotify_row), getString(R.string.spotify_package), spotify});
+        below.add(new Object[] {getString(R.string.row_movies), PLEX_PKG, plexMovies});
+        Map<String, Long> used = lastUsed(continueItems);
+        // A stable sort: rows of apps used at the same time keep the design's order.
+        below.sort((a, b) -> Long.compare(used.getOrDefault((String) b[1], 0L), used.getOrDefault((String) a[1], 0L)));
+        for (Object[] row : below) {
+            @SuppressWarnings("unchecked")
+            List<TvRows.Item> items = (List<TvRows.Item>) row[2];
+            addRow(rowsBottom, (String) row[0], (String) row[1], items, false);
+        }
 
-        for (int i = 1; i < stageDots.length; i++) {
-            stageDots[i].setVisibility(i - 1 < picks.size() ? View.VISIBLE : View.GONE);
-        }
         if (lastTag != null) {
             View again = findCard(lastTag);
             lastCard = again;
-        }
-        if (focused != null && isInside(focused, stageView) && stageSlot > 0) {
-            // The picks were just rebuilt: show the new copy (it may have artwork now).
-            showStage(stageSlot);
         }
         if (focusedTag != null) {
             View again = findCard(focusedTag);
@@ -1019,6 +943,35 @@ public class HomeActivity extends Activity {
                 target.requestFocus();
             }
         }
+    }
+
+    /**
+     * When each app was last used: opened from Home (noteUsed) or, for what was watched elsewhere, the
+     * latest watch time in Continue watching, whichever is later.
+     *
+     * @param continueItems the Continue watching items
+     * @return epoch ms by package
+     */
+    private Map<String, Long> lastUsed(List<TvRows.Item> continueItems) {
+        Map<String, Long> used = new HashMap<>();
+        for (Map.Entry<String, ?> e : getSharedPreferences("used", MODE_PRIVATE).getAll().entrySet()) {
+            used.put(e.getKey(), (Long) e.getValue());
+        }
+        for (TvRows.Item item : continueItems) {
+            if (item.packageName != null) {
+                used.merge(item.packageName, item.watchedAtMs, Math::max);
+            }
+        }
+        return used;
+    }
+
+    /**
+     * Notes that an app was opened from Home now, for the order of the rows.
+     *
+     * @param pkg the app's package
+     */
+    private void noteUsed(String pkg) {
+        getSharedPreferences("used", MODE_PRIVATE).edit().putLong(pkg, System.currentTimeMillis()).apply();
     }
 
     /**
@@ -1140,7 +1093,7 @@ public class HomeActivity extends Activity {
     }
 
     /**
-     * A 16:9 content card as in the design: artwork, a label top left (channel or year, none in mixed rows), a
+     * A 16:9 content card (square for Spotify) as in the design: artwork, a label top left (channel or year, none in mixed rows), a
      * corner badge top right (time left, "Next" or the length), the title at the bottom and a progress
      * bar in the source's color. Focus shows the item in the hero; OK opens it.
      *
@@ -1225,7 +1178,9 @@ public class HomeActivity extends Activity {
             card.addView(bar, barLp);
         }
 
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(px(320), px(180));
+        // Spotify's playlists and podcasts have square covers.
+        boolean square = getString(R.string.spotify_package).equals(item.packageName);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(px(square ? 180 : 320), px(180));
         lp.rightMargin = px(28);
         card.setLayoutParams(lp);
         card.setOnFocusChangeListener((v, has) -> {
@@ -1253,6 +1208,7 @@ public class HomeActivity extends Activity {
             startActivity(new Intent(this, PlexLoginActivity.class));
             return;
         }
+        noteUsed(item.packageName);
         try {
             String uri = item.intentUri;
             String play = PLEX_PKG.equals(item.packageName) ? Plex.appLink(item) : null;
@@ -1379,6 +1335,7 @@ public class HomeActivity extends Activity {
         // The Your apps row shows no names: scrolled down, only the names would peek above the next row.
         LinearLayout cell = tileShell(pkg, art, banner != null, movable ? null : ri.loadLabel(pm).toString());
         cell.setOnClickListener(v -> {
+            noteUsed(pkg);
             if (LIVE_TV_PKG.equals(pkg)) {
                 openLiveTv();
                 return;
@@ -1483,8 +1440,8 @@ public class HomeActivity extends Activity {
                 settleRows(v);
             }
             if (has && v.getParent() == appRow) {
-                // Back from the content rows: the hero shows the stage again (live TV on LIVE).
-                showStage(stageSlot);
+                // Back from the content rows: live TV again.
+                showLive();
             }
             if (has && inFirstGridLine(v)) {
                 // The scroller only brings the tile itself into view; show the grid's top gap too.
@@ -1995,8 +1952,8 @@ public class HomeActivity extends Activity {
         if (apps) {
             setLive(false);
             showHeroImage(null);
-        } else if (stageSlot == 0) {
-            showStage(0);
+        } else {
+            showLive();
         }
         markTabs();
     }

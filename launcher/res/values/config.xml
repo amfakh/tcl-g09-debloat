@@ -45,11 +45,15 @@
         <item>Subscriptions</item>
     </string-array>
 
+    <!-- Spotify's channel in the TV provider (playlists and podcasts), a row after YouTube's. -->
+    <string name="spotify_package" translatable="false">com.spotify.tv.android</string>
+    <string name="spotify_row" translatable="false">Spotify</string>
+
     <!-- Google TV's own home screen. Whenever it comes up, HomeRedirectService opens TCL Home over it;
          other Google TV screens (the profile chooser) stay reachable. -->
     <string name="stock_home_activity" translatable="false">com.google.android.apps.tv.launcherx.home.HomeActivity</string>
 
-    <!-- Plex's own channel in the TV provider: a row of its own, and the three picks right of LIVE. -->
+    <!-- Plex's own channel in the TV provider, a row of its own. -->
     <string name="plex_recommendations" translatable="false">Recommendations from Plex</string>
 
     <!-- Plex On Deck in Continue watching. Sign in once with the card in that row (plex.tv/link). -->
