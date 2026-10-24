@@ -271,8 +271,8 @@ dan di bawahnya rata kanan: ikon cuaca, suhu, peluang hujan, dan pill AQI.
   pencarian suara Google TV. Di Google TV, Search juga tab yang berganti saat difokus, tapi halamannya
   ada di dalam launcher Google TV sendiri dan tidak bisa dipanggil app lain. Kalau Search di sini
   dibuka saat difokus, overlay suara akan muncul setiap fokus lewat.
-- Kiri di tab Home dan kanan di Settings tidak ke mana-mana, jadi fokus tidak loncat ke baris di
-  bawah.
+- Kiri di tab Home tidak ke mana-mana, jadi fokus tidak loncat ke baris di bawah. Kanan di Settings
+  membuka quick settings TCL (`quick_settings_activity`, `com.tcl.dashboard`), cuma dari tombol itu.
 - Warnanya diukur dari screenshot launcher bawaan: tab yang difokus berisi biru keabuan muda
   `#CFDFED` dengan teks hampir hitam, tombol ikon yang difokus berisi lingkaran `#E4F3FF` dengan
   namanya muncul di bawah ("Search", "Settings"), tab yang sedang tampil tapi tidak difokus berisi abu
@@ -296,7 +296,14 @@ siaran. Geser kiri-kanan di Your apps tidak menyentuh hero yang sudah menampilka
 tidak berkedip. Selama hero menampilkan item, siaran tetap jalan di belakang, suaranya juga, jadi
 siarannya langsung ada tanpa memuat channel lagi. Tuner baru dilepas saat aplikasi lain menutupi TCL
 Home (`onStop`), atau tepat sebelum tile TV membuka Live TV. Tombol Home dan panel quick settings TCL
-(`com.tcl.dashboard`) cuma mem-pause TCL Home, jadi siaran jalan terus tanpa tune ulang.
+(`com.tcl.dashboard`) cuma mem-pause TCL Home, jadi siaran jalan terus tanpa tune ulang. Selama app lain
+memutar musik, video, atau game di belakang (misalnya Spotify yang masih jalan setelah Home ditekan),
+suara siaran dimatikan lewat `TvView.setStreamVolume(0)` dan kembali begitu app itu berhenti. Tuner TCL
+tetap senyap setelah volume 0 walau volumenya dikembalikan ke 1, dan tune ke channel yang sedang
+diputar diabaikan ("same program"), jadi saat suara kembali sesi tuner dibuat baru di channel yang
+sama (siaran kosong sekitar 3 detik). Track
+tuner sendiri dikenali dari flag `FLAG_HW_AV_SYNC` yang tidak dipakai app biasa, dan status player
+dibaca dari deskripsinya (`state:started`), karena cuma itu yang terbuka untuk app pihak ketiga.
 
 **Baris.** Your apps dan Continue watching selalu paling atas. Baris di bawahnya (Recommendations from
 Plex, YouTube Recommended for you, Recently added, YouTube Subscriptions, Spotify, Movies in your
@@ -484,7 +491,8 @@ Lewat `dumpsys`, struktur UI dari `uiautomator`, dan screenshot (22–23 Oktober
 | Favorit | Add dari grid lalu Remove dari Home; Move tidak bisa melewati tile All apps; chevron hanya ke arah yang mungkin |
 | Menu tile | App info membuka halaman app di Settings; tile app sistem tanpa Uninstall |
 | Cuaca dan AQI | Suhu, kode cuaca, peluang hujan, dan AQI sama dengan jawaban Open-Meteo yang dibaca langsung dari Mac |
-| Top bar | Profil membuka pemilih profil Google TV, Settings membuka Settings, Search membuka pencarian suara. Kiri di Home dan kanan di Settings tetap di tempat |
+| Top bar | Profil membuka pemilih profil Google TV, Settings membuka Settings, Search membuka pencarian suara. Kiri di Home tetap di tempat; kanan di Settings membuka `com.tcl.dashboard`, kanan di tile app tidak |
+| Spotify di belakang | Play → `com.tcl.tvinput` `onSetStreamVolume:0.0`; pause → sesi baru (`releaseSession`, `createSession`, `onVideoAvailable` 3 detik kemudian) dan siaran terdengar lagi |
 | Highlight tab | Terekam bergeser di tengah jalan antara Apps dan Home (`screenrecord`); 90 frame saat pindah tab 6 kali, 1 janky, median 15 ms |
 | Home dan quick settings | TCL Home hanya pause; 0 baris log `TvInputManagerService` (CH+ sebagai pembanding: 50 baris) |
 | Back | Dari kartu Continue watching kembali ke tile TV, tanpa tune ulang |

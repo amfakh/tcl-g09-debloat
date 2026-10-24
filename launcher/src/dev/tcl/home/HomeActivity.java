@@ -15,6 +15,9 @@ import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.media.AudioAttributes;
+import android.media.AudioManager;
+import android.media.AudioPlaybackConfiguration;
 import android.media.tv.TvContract;
 import android.media.tv.TvView;
 import android.net.Uri;
@@ -120,6 +123,8 @@ public class HomeActivity extends Activity {
     private GradientDrawable tabHighlightBg;
     private int tabHighlightColor;
     private ValueAnimator tabHighlightAnim;
+    // The last button of the top bar; Right on it opens quick settings.
+    private View settingsButton;
     // The name shown under a focused tool button.
     private TextView tip;
     private View weatherLine;
@@ -185,6 +190,21 @@ public class HomeActivity extends Activity {
         public void onChange(boolean selfChange) {
             handler.removeCallbacks(reloadGuide);
             handler.postDelayed(reloadGuide, GUIDE_SETTLE_MS);
+        }
+    };
+
+    // Whether live TV is muted because another app plays sound (see muteLiveFor).
+    private boolean liveMuted;
+    // Another app playing music or video behind Home (Spotify) mutes live TV until it stops.
+    private final AudioManager.AudioPlaybackCallback otherAudio = new AudioManager.AudioPlaybackCallback() {
+        /**
+         * Mutes or unmutes live TV for what plays now.
+         *
+         * @param configs every player on the device
+         */
+        @Override
+        public void onPlaybackConfigChanged(List<AudioPlaybackConfiguration> configs) {
+            muteLiveFor(configs);
         }
     };
 
@@ -352,6 +372,9 @@ public class HomeActivity extends Activity {
         getContentResolver().registerContentObserver(TvContract.PreviewPrograms.CONTENT_URI, true, tvRowsChanged);
         getContentResolver().registerContentObserver(TvContract.WatchNextPrograms.CONTENT_URI, true, tvRowsChanged);
         getContentResolver().registerContentObserver(TvContract.Programs.CONTENT_URI, true, guideChanged);
+        AudioManager audio = getSystemService(AudioManager.class);
+        audio.registerAudioPlaybackCallback(otherAudio, handler);
+        muteLiveFor(audio.getActivePlaybackConfigurations());
         if (hidden) {
             hidden = false;
             loadApps();
@@ -384,7 +407,44 @@ public class HomeActivity extends Activity {
         getContentResolver().unregisterContentObserver(tvRowsChanged);
         getContentResolver().unregisterContentObserver(guideChanged);
         handler.removeCallbacks(reloadGuide);
+        getSystemService(AudioManager.class).unregisterAudioPlaybackCallback(otherAudio);
         super.onPause();
+    }
+
+    /**
+     * Mutes live TV while another app plays music, video or a game, and gives it its sound back once
+     * none does. The tuner's own track is told apart by its hardware A/V sync flag, which app players
+     * do not set. A player's state is only public in its description ("state:started"): apps get
+     * every player, anonymized, from the system. The TCL tuner keeps its sound off after volume 0
+     * until it tunes again, so unmuting also starts a new session on the same channel.
+     *
+     * @param configs every player on the device
+     */
+    private void muteLiveFor(List<AudioPlaybackConfiguration> configs) {
+        if (tvView == null) {
+            return;
+        }
+        boolean other = false;
+        for (AudioPlaybackConfiguration c : configs) {
+            AudioAttributes a = c.getAudioAttributes();
+            int usage = a.getUsage();
+            if ((a.getFlags() & AudioAttributes.FLAG_HW_AV_SYNC) == 0
+                    && (usage == AudioAttributes.USAGE_MEDIA || usage == AudioAttributes.USAGE_GAME)
+                    && c.toString().contains("state:started")) {
+                other = true;
+                break;
+            }
+        }
+        if (other == liveMuted) {
+            return;
+        }
+        liveMuted = other;
+        tvView.setStreamVolume(other ? 0f : 1f);
+        if (!other && tuned) {
+            // Tuning the channel it plays is ignored ("same program"): a new session it is.
+            live.stop();
+            tuned = live.start();
+        }
     }
 
     /** Another app covers Home: frees the tuner for Live TV and other apps. */
@@ -757,6 +817,11 @@ public class HomeActivity extends Activity {
         }
         if (swallowKeyUp && ok && event.getAction() == KeyEvent.ACTION_UP) {
             swallowKeyUp = false;
+            return true;
+        }
+        if (event.getAction() == KeyEvent.ACTION_DOWN && code == KeyEvent.KEYCODE_DPAD_RIGHT
+                && event.getRepeatCount() == 0 && getCurrentFocus() == settingsButton) {
+            start(new Intent().setComponent(ComponentName.unflattenFromString(getString(R.string.quick_settings_activity))));
             return true;
         }
         if (event.getAction() == KeyEvent.ACTION_DOWN && !showingApps) {
@@ -1819,11 +1884,12 @@ public class HomeActivity extends Activity {
             v -> start(new Intent("android.search.action.GLOBAL_SEARCH"))));
         LinearLayout.LayoutParams gearLp = new LinearLayout.LayoutParams(-2, px(80));
         gearLp.leftMargin = px(8);
-        View gear = pillButton(null, Icon.GEAR, getString(R.string.tip_settings),
+        settingsButton = pillButton(null, Icon.GEAR, getString(R.string.tip_settings),
             v -> start(new Intent(android.provider.Settings.ACTION_SETTINGS)));
-        gear.setId(View.generateViewId());
-        gear.setNextFocusRightId(gear.getId());
-        tools.addView(gear, gearLp);
+        // Right on Settings opens quick settings (see dispatchKeyEvent) instead of moving focus.
+        settingsButton.setId(View.generateViewId());
+        settingsButton.setNextFocusRightId(settingsButton.getId());
+        tools.addView(settingsButton, gearLp);
         LinearLayout.LayoutParams toolsLp = new LinearLayout.LayoutParams(-2, -2);
         toolsLp.leftMargin = px(28);
         bar.addView(tools, toolsLp);
