@@ -35,6 +35,13 @@ final class TvRows {
         /** When it was last watched, or 0. */
         long watchedAtMs;
         long sortKey;
+        /** How a smart device's card is coloured: a step of the pastel air quality scale, or 0 for none. */
+        int accent;
+        /** A smart device's second count left, from 0 to 1, such as the fountain's clean; -1 for none. */
+        float progress2 = -1;
+        /** A smart device's readings for its detail line: an icon kind each (-1 for none) and its text. */
+        int[] statIcons;
+        String[] statTexts;
 
         /**
          * @return the fraction watched, or -1 when nothing was watched yet

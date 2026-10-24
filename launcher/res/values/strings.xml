@@ -4,6 +4,8 @@
     <string name="row_apps">Your apps</string>
     <string name="tab_home">Home</string>
     <string name="tab_apps">Apps</string>
+    <string name="tab_devices">Devices</string>
+    <string name="devices_empty">No smart devices yet. Run tools/smart-home.sh on the computer.</string>
     <string name="row_continue">Continue watching</string>
     <string name="plex_sign_in">Sign in to Plex</string>
     <string name="plex_card">Sign in to Plex to add your On Deck here</string>

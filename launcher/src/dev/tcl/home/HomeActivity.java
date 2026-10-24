@@ -40,6 +40,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -80,10 +81,13 @@ public class HomeActivity extends Activity {
     private final ExecutorService background = Executors.newSingleThreadExecutor();
     // The guide lookup gets its own thread: background can be busy for seconds with Plex requests.
     private final ExecutorService guide = Executors.newSingleThreadExecutor();
+    // Smart devices that do not answer take seconds to time out; they must not hold up the other rows.
+    private final ExecutorService smartHomeThread = Executors.newSingleThreadExecutor();
     // When the program shown in the hero ends, so the clock tick reads the next one; 0 for none.
     private long programEndMs;
     private Images images;
     private Plex plex;
+    private SmartHome smartHome;
     private LiveTv live;
     private TvView tvView;
     // Whether the hero shows live TV (image layer faded out).
@@ -100,6 +104,7 @@ public class HomeActivity extends Activity {
     private List<TvRows.Item> plexRecent = new ArrayList<>();
     private List<TvRows.Item> plexMovies = new ArrayList<>();
     private List<TvRows.Item> spotify = new ArrayList<>();
+    private List<TvRows.Item> smartItems = new ArrayList<>();
     private String[] youtubeRows;
 
     // Over live TV: a dark layer holding two artwork views that take turns, for crossfades.
@@ -150,7 +155,16 @@ public class HomeActivity extends Activity {
     private LinearLayout appsGrid;
     private View homeTab;
     private View appsTab;
-    private boolean showingApps;
+    private View devicesTab;
+    private LinearLayout devicesPane;
+    private LinearLayout devicesRow;
+    private DeviceOptions options;
+    private TextView devicesEmpty;
+    private static final int TAB_HOME = 0;
+    private static final int TAB_APPS = 1;
+    private static final int TAB_DEVICES = 2;
+    // The tab on screen: Home, Apps or Devices.
+    private int tab = TAB_HOME;
     private View topBarView;
     // Card left when Up moved out of the rows, so Down returns to it.
     private View lastCard;
@@ -244,6 +258,8 @@ public class HomeActivity extends Activity {
         images = new Images(this);
         weather = new Weather(this);
         plex = new Plex(this);
+        smartHome = new SmartHome(this);
+        options = new DeviceOptions(this, smartHome);
         youtubeRows = getResources().getStringArray(R.array.youtube_rows);
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(BG);
@@ -342,6 +358,20 @@ public class HomeActivity extends Activity {
         appsPane.addView(appsGrid, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL));
         panes.addView(appsPane, new FrameLayout.LayoutParams(-1, -1));
 
+        devicesPane = column();
+        devicesPane.setVisibility(View.GONE);
+        // The focused card grows and draws its ring past the padding; the pane must not clip it.
+        devicesPane.setClipChildren(false);
+        devicesPane.setClipToPadding(false);
+        devicesPane.setPadding(px(28), px(64), 0, 0);
+        devicesRow = new LinearLayout(this);
+        devicesRow.setClipChildren(false);
+        devicesPane.addView(devicesRow);
+        devicesEmpty = text(24, Color.argb(180, 255, 255, 255), false);
+        devicesEmpty.setText(R.string.devices_empty);
+        devicesPane.addView(devicesEmpty);
+        panes.addView(devicesPane, new FrameLayout.LayoutParams(-1, -1));
+
         tip = text(22, TEXT, false);
         tip.setAlpha(0f);
         root.addView(tip, new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START));
@@ -369,6 +399,7 @@ public class HomeActivity extends Activity {
         HomeRedirectService.cancelPlexPlay();
         tick.run();
         loadRows(true);
+        loadSmartHome();
         // Apps rewrite their rows a few seconds after they close (YouTube does): show the new copy.
         getContentResolver().registerContentObserver(TvContract.PreviewPrograms.CONTENT_URI, true, tvRowsChanged);
         getContentResolver().registerContentObserver(TvContract.WatchNextPrograms.CONTENT_URI, true, tvRowsChanged);
@@ -380,7 +411,7 @@ public class HomeActivity extends Activity {
             hidden = false;
             loadApps();
             View first = firstCard();
-            if (!showingApps) {
+            if (tab == TAB_HOME) {
                 // The Home key already did this in onNewIntent.
                 if (!liveOn) {
                     showLive();
@@ -484,8 +515,8 @@ public class HomeActivity extends Activity {
      * when the hero already shows it, so it is not tuned again.
      */
     private void backToTop() {
-        if (showingApps) {
-            showApps(false);
+        if (tab != TAB_HOME) {
+            showTab(TAB_HOME);
         }
         rowsScroll.scrollTo(0, 0);
         View first = firstCard();
@@ -825,7 +856,7 @@ public class HomeActivity extends Activity {
             HomeRedirectService.openQuickSettings();
             return true;
         }
-        if (event.getAction() == KeyEvent.ACTION_DOWN && !showingApps) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN && tab == TAB_HOME) {
             View f = getCurrentFocus();
             int key = event.getKeyCode();
             if (f != null && key == KeyEvent.KEYCODE_DPAD_DOWN && isInside(f, rowsScroll)
@@ -845,16 +876,26 @@ public class HomeActivity extends Activity {
                     return true;
                 }
             }
-        } else if (event.getAction() == KeyEvent.ACTION_DOWN && showingApps
+        } else if (event.getAction() == KeyEvent.ACTION_DOWN && tab == TAB_APPS
                 && event.getKeyCode() == KeyEvent.KEYCODE_DPAD_DOWN && isInside(getCurrentFocus(), topBarView)) {
             View first = firstGridTile();
             if (first != null) {
                 first.requestFocus();
                 return true;
             }
-        } else if (event.getAction() == KeyEvent.ACTION_DOWN && showingApps
+        } else if (event.getAction() == KeyEvent.ACTION_DOWN && tab == TAB_APPS
                 && event.getKeyCode() == KeyEvent.KEYCODE_DPAD_UP && inFirstGridLine(getCurrentFocus())) {
             appsTab.requestFocus();
+            return true;
+        } else if (event.getAction() == KeyEvent.ACTION_DOWN && tab == TAB_DEVICES
+                && event.getKeyCode() == KeyEvent.KEYCODE_DPAD_DOWN && isInside(getCurrentFocus(), topBarView)
+                && devicesRow.getChildCount() > 0) {
+            devicesRow.getChildAt(0).requestFocus();
+            return true;
+        } else if (event.getAction() == KeyEvent.ACTION_DOWN && tab == TAB_DEVICES
+                && event.getKeyCode() == KeyEvent.KEYCODE_DPAD_UP
+                && isInside(getCurrentFocus(), devicesRow)) {
+            devicesTab.requestFocus();
             return true;
         }
         return super.dispatchKeyEvent(event);
@@ -1143,6 +1184,282 @@ public class HomeActivity extends Activity {
                 target.requestFocus();
             }
         }
+    }
+
+    /**
+     * Asks the smart devices for their state and shows the row again with it.
+     */
+    private void loadSmartHome() {
+        smartHomeThread.execute(() -> {
+            List<TvRows.Item> items = smartHome.read();
+            handler.post(() -> {
+                smartItems = items;
+                showDevices();
+            });
+        });
+    }
+
+    /**
+     * Shows the Devices cards. With the same devices as before only the state text changes: removing the
+     * card that has focus would hand focus to the Home tab, which switches tabs.
+     */
+    private void showDevices() {
+        fillDevices(devicesRow, smartItems);
+        devicesEmpty.setVisibility(smartItems.isEmpty() ? View.VISIBLE : View.GONE);
+        options.refresh();
+    }
+
+    /**
+     * Puts the cards of one row on screen: the same cards as before only get new state text, otherwise the
+     * row is built again.
+     *
+     * @param row the row
+     * @param items its devices
+     */
+    private void fillDevices(LinearLayout row, List<TvRows.Item> items) {
+        if (row.getChildCount() == items.size()) {
+            for (int i = 0; i < items.size(); i++) {
+                @SuppressWarnings("unchecked")
+                java.util.function.Consumer<TvRows.Item> paint = (java.util.function.Consumer<TvRows.Item>) row.getChildAt(i).getTag();
+                paint.accept(items.get(i));
+            }
+            return;
+        }
+        row.removeAllViews();
+        for (TvRows.Item item : items) {
+            row.addView(deviceCard(item));
+        }
+    }
+
+    /**
+     * A card for one smart device: an icon chip and a state pill on top, the name and one line of detail at
+     * the bottom. OK switches it on or off. The card paints itself again from a new item when the state is read
+     * again, so the card that has focus is never replaced.
+     *
+     * @param item the device; its description is the state, its stats the detail line
+     * @return the focusable card
+     */
+    private View deviceCard(TvRows.Item item) {
+        FrameLayout card = new FrameLayout(this);
+        card.setFocusable(true);
+        GradientDrawable ring = new GradientDrawable();
+        ring.setCornerRadius(px(16));
+        card.setForeground(ring);
+        GradientDrawable fill = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[] {0, 0});
+        fill.setCornerRadius(px(16));
+        card.setBackground(fill);
+        card.setClipToOutline(true);
+
+        GradientDrawable chipBg = new GradientDrawable();
+        chipBg.setShape(GradientDrawable.OVAL);
+        FrameLayout chip = new FrameLayout(this);
+        chip.setBackground(chipBg);
+        Icon icon = new Icon(this, iconFor(item.packageName));
+        chip.addView(icon, new FrameLayout.LayoutParams(px(30), px(30), Gravity.CENTER));
+        FrameLayout.LayoutParams chipLp = new FrameLayout.LayoutParams(px(52), px(52), Gravity.TOP | Gravity.START);
+        chipLp.setMargins(px(16), px(16), 0, 0);
+        card.addView(chip, chipLp);
+
+        GradientDrawable pillBg = new GradientDrawable();
+        pillBg.setCornerRadius(px(18));
+        LinearLayout pill = new LinearLayout(this);
+        pill.setGravity(Gravity.CENTER_VERTICAL);
+        pill.setPadding(px(14), 0, px(14), 0);
+        pill.setBackground(pillBg);
+        GradientDrawable pillDot = new GradientDrawable();
+        pillDot.setShape(GradientDrawable.OVAL);
+        View dot = new View(this);
+        dot.setBackground(pillDot);
+        pill.addView(dot, new LinearLayout.LayoutParams(px(10), px(10)));
+        TextView pillText = text(18, Color.WHITE, true);
+        pillText.setPadding(px(8), 0, 0, 0);
+        pill.addView(pillText);
+        FrameLayout.LayoutParams pillLp = new FrameLayout.LayoutParams(-2, px(36), Gravity.TOP | Gravity.END);
+        pillLp.setMargins(0, px(20), px(16), 0);
+        card.addView(pill, pillLp);
+
+        LinearLayout bottom = column();
+        TextView title = text(24, Color.WHITE, true);
+        title.setText(item.title);
+        bottom.addView(title);
+        LinearLayout detailRow = new LinearLayout(this);
+        detailRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams detailLp = new LinearLayout.LayoutParams(-1, px(24));
+        detailLp.topMargin = px(2);
+        bottom.addView(detailRow, detailLp);
+        FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
+        bottomLp.setMargins(px(16), 0, px(16), px(26));
+        card.addView(bottom, bottomLp);
+
+        // What is left, as thin bars along the bottom like the progress of a content card. The purifier has one
+        // (its filter) across the card; the fountain has two side by side, each under its own reading (filter,
+        // then the days until cleaning).
+        LinearLayout barsRow = new LinearLayout(this);
+        FrameLayout[] halves = new FrameLayout[2];
+        View[] bars = new View[2];
+        for (int i = 0; i < 2; i++) {
+            halves[i] = new FrameLayout(this);
+            halves[i].setBackgroundColor(Color.argb(60, 255, 255, 255));
+            bars[i] = new View(this);
+            bars[i].setPivotX(0);
+            bars[i].setScaleX(0);
+            halves[i].addView(bars[i], new FrameLayout.LayoutParams(-1, -1));
+            LinearLayout.LayoutParams halfLp = new LinearLayout.LayoutParams(0, -1, 1f);
+            halfLp.leftMargin = i > 0 ? px(16) : 0;
+            barsRow.addView(halves[i], halfLp);
+        }
+        FrameLayout.LayoutParams barsLp = new FrameLayout.LayoutParams(-1, px(4), Gravity.BOTTOM);
+        barsLp.setMargins(px(16), 0, px(16), px(12));
+        card.addView(barsRow, barsLp);
+
+        java.util.function.Consumer<TvRows.Item> paint = now -> {
+            String state = now.description;
+            boolean on = SmartHome.STATE_ON.equals(state);
+            boolean off = SmartHome.STATE_OFF.equals(state);
+            // On, the card takes on the colour of what it measures: air quality for the purifier, filter for the
+            // fountain. The item carries the step as a pastel, too pale to show on a dark card, so the card uses
+            // the saturated colour of the same step.
+            int vivid = vivid(now.accent);
+            int base = Color.rgb(0x2A, 0x2C, 0x31);
+            fill.setColors(on && vivid != 0 ? new int[] {blend(vivid, base, 0.5f), blend(vivid, base, 0.28f)}
+                : on ? new int[] {Color.rgb(0x34, 0x40, 0x4B), base}
+                : off ? new int[] {Color.rgb(0x23, 0x25, 0x29), Color.rgb(0x23, 0x25, 0x29)}
+                : new int[] {Color.rgb(0x2A, 0x2C, 0x31), Color.rgb(0x2A, 0x2C, 0x31)});
+            chipBg.setColor(on ? Color.argb(41, 207, 223, 237) : Color.argb(18, 255, 255, 255));
+            icon.setColor(on ? Color.rgb(207, 223, 237) : Color.rgb(0x8B, 0x8F, 0x94));
+            pillBg.setColor(on ? Color.rgb(0xCF, 0xDF, 0xED) : off ? Color.argb(26, 255, 255, 255) : Color.rgb(0xFC, 0xE5, 0xCD));
+            pillDot.setColor(on ? Color.rgb(0x2E, 0x7D, 0x32) : off ? Color.rgb(0x8B, 0x8F, 0x94) : Color.rgb(0xB4, 0x53, 0x09));
+            pillText.setTextColor(on ? Color.rgb(0x0E, 0x0E, 0x0F) : off ? Color.rgb(0xC4, 0xC7, 0xCB) : Color.rgb(0x17, 0x18, 0x1B));
+            pillText.setText(on ? "On" : off ? "Off" : "Not reachable");
+            // A sensor is never switched, so it says nothing about being on; only that it cannot be reached.
+            pill.setVisibility("sensor".equals(now.packageName) && on ? View.GONE : View.VISIBLE);
+            title.setTextColor(on ? Color.WHITE : Color.argb(184, 255, 255, 255));
+            // Each reading is an icon and its value. With two bars (the fountain) each reading takes the half of
+            // the card above its own bar.
+            boolean split = now.progress2 >= 0;
+            detailRow.removeAllViews();
+            for (int i = 0; on && now.statTexts != null && i < now.statTexts.length; i++) {
+                LinearLayout reading = new LinearLayout(this);
+                reading.setGravity(Gravity.CENTER_VERTICAL);
+                if (now.statIcons[i] >= 0) {
+                    Icon stat = new Icon(this, now.statIcons[i]);
+                    stat.setColor(Color.argb(200, 255, 255, 255));
+                    LinearLayout.LayoutParams statLp = new LinearLayout.LayoutParams(px(20), px(20));
+                    statLp.rightMargin = px(6);
+                    reading.addView(stat, statLp);
+                }
+                TextView value = text(18, Color.argb(200, 255, 255, 255), false);
+                value.setText(now.statTexts[i]);
+                reading.addView(value);
+                LinearLayout.LayoutParams readingLp = split ? new LinearLayout.LayoutParams(0, -2, 1f)
+                    : new LinearLayout.LayoutParams(-2, -2);
+                readingLp.leftMargin = i > 0 ? px(split ? 16 : 18) : 0;
+                detailRow.addView(reading, readingLp);
+            }
+            float[] left = {now.progress(), now.progress2};
+            boolean reachable = !SmartHome.STATE_OFFLINE.equals(state);
+            for (int i = 0; i < 2; i++) {
+                boolean shown = left[i] >= 0 && reachable;
+                halves[i].setVisibility(shown ? View.VISIBLE : View.GONE);
+                if (shown) {
+                    bars[i].setBackgroundColor(left[i] <= 0.15f ? Color.rgb(0xFC, 0xE5, 0xCD)
+                        : on ? Color.rgb(0xCF, 0xDF, 0xED) : Color.rgb(0x8B, 0x8F, 0x94));
+                    bars[i].animate().scaleX(Math.max(0.01f, left[i])).setDuration(400).start();
+                }
+            }
+        };
+        paint.accept(item);
+        card.setTag(paint);
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(px(320), px(180));
+        lp.rightMargin = px(28);
+        card.setLayoutParams(lp);
+        card.setOnFocusChangeListener((v, has) -> {
+            v.animate().scaleX(has ? 1.06f : 1f).scaleY(has ? 1.06f : 1f).setDuration(150).start();
+            ring.setStroke(has ? px(4) : 0, TEXT);
+        });
+        if ("sensor".equals(item.packageName)) {
+            // It can be focused like the other cards, but there is nothing to press or hold.
+            return card;
+        }
+        card.setOnClickListener(v -> switchSmart(item));
+        card.setOnLongClickListener(v -> {
+            options.show(item.action, item.title, iconFor(item.packageName), v);
+            return true;
+        });
+        return card;
+    }
+
+    /**
+     * @param top the colour mixed in
+     * @param base the colour it is mixed into
+     * @param amount how much of top, from 0 to 1
+     * @return the mix
+     */
+    private static int blend(int top, int base, float amount) {
+        return Color.rgb(
+            Math.round(Color.red(top) * amount + Color.red(base) * (1 - amount)),
+            Math.round(Color.green(top) * amount + Color.green(base) * (1 - amount)),
+            Math.round(Color.blue(top) * amount + Color.blue(base) * (1 - amount)));
+    }
+
+    /**
+     * @param pastel a step of the pastel scale (the same as the air quality pill)
+     * @return the saturated colour of the same step (green, yellow, orange, red); any other colour as it is
+     */
+    private static int vivid(int pastel) {
+        switch (pastel) {
+            case 0xFFD9EAD3:
+                return 0xFF34A853;
+            case 0xFFFFF2CC:
+                return 0xFFFBBC04;
+            case 0xFFFCE5CD:
+                return 0xFFFA7B17;
+            case 0xFFF4CCCC:
+                return 0xFFEA4335;
+            default:
+                // Already a saturated colour, such as the air conditioner's mode.
+                return pastel;
+        }
+    }
+
+    private static int iconFor(String kind) {
+        return "purifier".equals(kind) ? Icon.WIND : "ac".equals(kind) ? Icon.SNOW
+            : "sensor".equals(kind) ? Icon.THERMO : Icon.DROP;
+    }
+
+    /**
+     * Runs a change to a smart device on the smart thread, then reads the devices again, so the cards and an open
+     * options sheet show what the device reports.
+     *
+     * @param send the change
+     */
+    void smart(DeviceOptions.Send send) {
+        smartHomeThread.execute(() -> {
+            try {
+                send.run();
+            } catch (IOException e) {
+                // The read below shows a device that does not answer as not reachable.
+            }
+            loadSmartHome();
+        });
+    }
+
+    /**
+     * Switches the smart device a card stands for, or sends the AC state it stands for, then shows how it
+     * is now.
+     *
+     * @param item the card's item
+     */
+    private void switchSmart(TvRows.Item item) {
+        String[] at = item.action.split(":");
+        smart(() -> {
+            if (at[0].equals("ac")) {
+                smartHome.sendAc(at[1]);
+            } else {
+                smartHome.toggle(Integer.parseInt(at[1]));
+            }
+        });
     }
 
     /**
@@ -1562,7 +1879,7 @@ public class HomeActivity extends Activity {
         art.setColor(TEXT);
         LinearLayout cell = tileShell(ALL_APPS, art, false, null, true);
         cell.setOnClickListener(v -> {
-            showApps(true);
+            showTab(TAB_APPS);
             View first = firstGridTile();
             if (first != null) {
                 first.requestFocus();
@@ -1887,23 +2204,30 @@ public class HomeActivity extends Activity {
         LinearLayout tabs = new LinearLayout(this);
         tabs.setGravity(Gravity.CENTER_VERTICAL);
         nav.addView(tabs);
-        homeTab = pillButton(getString(R.string.tab_home), -1, null, v -> showApps(false));
+        homeTab = pillButton(getString(R.string.tab_home), -1, null, v -> showTab(TAB_HOME));
         homeTab.setId(View.generateViewId());
         homeTab.setNextFocusLeftId(homeTab.getId());
-        appsTab = pillButton(getString(R.string.tab_apps), -1, null, v -> showApps(true));
+        appsTab = pillButton(getString(R.string.tab_apps), -1, null, v -> showTab(TAB_APPS));
+        devicesTab = pillButton(getString(R.string.tab_devices), -1, null, v -> showTab(TAB_DEVICES));
         // Like Google TV, focusing a tab switches to it; OK is not needed.
         homeTab.setOnFocusChangeListener((v, has) -> {
-            if (has && showingApps) {
-                showApps(false);
+            if (has && tab != TAB_HOME) {
+                showTab(TAB_HOME);
             }
         });
         appsTab.setOnFocusChangeListener((v, has) -> {
-            if (has && !showingApps) {
-                showApps(true);
+            if (has && tab != TAB_APPS) {
+                showTab(TAB_APPS);
+            }
+        });
+        devicesTab.setOnFocusChangeListener((v, has) -> {
+            if (has && tab != TAB_DEVICES) {
+                showTab(TAB_DEVICES);
             }
         });
         tabs.addView(homeTab);
         tabs.addView(appsTab);
+        tabs.addView(devicesTab);
         pillPainters.add(this::placeTabHighlight);
         LinearLayout.LayoutParams navLp = new LinearLayout.LayoutParams(-2, -2);
         navLp.leftMargin = px(28);
@@ -2053,8 +2377,8 @@ public class HomeActivity extends Activity {
      */
     private void placeTabHighlight() {
         View focus = getCurrentFocus();
-        boolean inTabs = focus == homeTab || focus == appsTab;
-        View target = inTabs ? focus : showingApps ? appsTab : homeTab;
+        boolean inTabs = focus == homeTab || focus == appsTab || focus == devicesTab;
+        View target = inTabs ? focus : tab == TAB_APPS ? appsTab : tab == TAB_DEVICES ? devicesTab : homeTab;
         if (target.getWidth() == 0) {
             target.post(this::placeTabHighlight);
             return;
@@ -2229,29 +2553,33 @@ public class HomeActivity extends Activity {
     }
 
     /**
-     * Switches between Home and the Apps grid. The Apps grid has no live picture or hero: the tuner
-     * stops while it shows.
+     * Switches between Home, the Apps grid and Devices. Apps and Devices have no live picture or hero: the
+     * tuner stops while they show.
      *
-     * @param apps true for the Apps grid
+     * @param next TAB_HOME, TAB_APPS or TAB_DEVICES
      */
-    private void showApps(boolean apps) {
-        showingApps = apps;
-        View in = apps ? appsPane : homePane;
-        View out = apps ? homePane : appsPane;
-        in.animate().cancel();
-        out.animate().cancel();
-        if (in.getVisibility() != View.VISIBLE) {
-            in.setAlpha(0f);
-            in.setVisibility(View.VISIBLE);
+    private void showTab(int next) {
+        tab = next;
+        View[] panes = {homePane, appsPane, devicesPane};
+        for (int i = 0; i < panes.length; i++) {
+            View pane = panes[i];
+            pane.animate().cancel();
+            if (i == next) {
+                if (pane.getVisibility() != View.VISIBLE) {
+                    pane.setAlpha(0f);
+                    pane.setVisibility(View.VISIBLE);
+                }
+                pane.animate().alpha(1f).setDuration(200).start();
+            } else {
+                pane.animate().alpha(0f).setDuration(200).withEndAction(() -> pane.setVisibility(View.GONE)).start();
+            }
         }
-        in.animate().alpha(1f).setDuration(200).start();
-        out.animate().alpha(0f).setDuration(200).withEndAction(() -> out.setVisibility(View.GONE)).start();
         appsPane.scrollTo(0, 0);
-        if (apps) {
+        if (next == TAB_HOME) {
+            showLive();
+        } else {
             setLive(false);
             showHeroImage(null);
-        } else {
-            showLive();
         }
         markTabs();
     }
@@ -2274,7 +2602,7 @@ public class HomeActivity extends Activity {
     /**
      * @return a vertical LinearLayout that lets focused children grow past it
      */
-    private LinearLayout column() {
+    LinearLayout column() {
         LinearLayout l = new LinearLayout(this);
         l.setOrientation(LinearLayout.VERTICAL);
         l.setClipChildren(false);
@@ -2287,7 +2615,7 @@ public class HomeActivity extends Activity {
      * @param bold whether to use the bold weight
      * @return a styled TextView
      */
-    private TextView text(float size, int color, boolean bold) {
+    TextView text(float size, int color, boolean bold) {
         TextView t = new TextView(this);
         t.setTextSize(TypedValue.COMPLEX_UNIT_PX, px(size));
         t.setTextColor(color);
@@ -2302,7 +2630,7 @@ public class HomeActivity extends Activity {
      * @param value size in 1080p design pixels
      * @return the size in real pixels
      */
-    private int px(float value) {
+    int px(float value) {
         return Math.round(value * getResources().getDisplayMetrics().widthPixels / 1920f);
     }
 }
