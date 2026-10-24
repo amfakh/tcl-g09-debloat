@@ -53,9 +53,6 @@
          other Google TV screens (the profile chooser) stay reachable. -->
     <string name="stock_home_activity" translatable="false">com.google.android.apps.tv.launcherx.home.HomeActivity</string>
 
-    <!-- Opened by Right on the Settings button at the end of the top bar: TCL's quick settings panel. -->
-    <string name="quick_settings_activity" translatable="false">com.tcl.dashboard/.MainActivity</string>
-
     <!-- Plex's own channel in the TV provider, a row of its own. -->
     <string name="plex_recommendations" translatable="false">Recommendations from Plex</string>
 

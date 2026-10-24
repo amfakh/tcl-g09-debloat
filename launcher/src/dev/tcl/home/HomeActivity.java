@@ -822,7 +822,7 @@ public class HomeActivity extends Activity {
         }
         if (event.getAction() == KeyEvent.ACTION_DOWN && code == KeyEvent.KEYCODE_DPAD_RIGHT
                 && event.getRepeatCount() == 0 && getCurrentFocus() == settingsButton) {
-            start(new Intent().setComponent(ComponentName.unflattenFromString(getString(R.string.quick_settings_activity))));
+            HomeRedirectService.openQuickSettings();
             return true;
         }
         if (event.getAction() == KeyEvent.ACTION_DOWN && !showingApps) {

@@ -42,6 +42,8 @@ public class HomeRedirectService extends AccessibilityService {
     private static volatile long stockHomeUntil;
     // Covers the window changes of the stock home opening; after that a new one means Home was pressed.
     private static final long STOCK_HOME_MS = 3_000;
+    // The running service, for actions Home asks of it; null until it connects.
+    private static volatile HomeRedirectService connected;
 
     /** Lets Google TV's home open once, without being replaced by TCL Home. */
     static void allowStockHome() {
@@ -63,9 +65,21 @@ public class HomeRedirectService extends AccessibilityService {
         plexPlayLink = null;
     }
 
+    /**
+     * Opens Google TV's quick settings panel. Its activity needs STATUS_BAR_SERVICE, which an app
+     * cannot hold; the notifications global action of an accessibility service opens it instead.
+     *
+     * @return false while the service is not connected
+     */
+    static boolean openQuickSettings() {
+        HomeRedirectService service = connected;
+        return service != null && service.performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS);
+    }
+
     /** Opens TCL Home once at boot, when Google TV's home is already showing before this service binds. */
     @Override
     protected void onServiceConnected() {
+        connected = this;
         if (SystemClock.elapsedRealtime() < BOOT_WINDOW_MS) {
             openHome();
         }
