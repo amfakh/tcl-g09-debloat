@@ -326,7 +326,8 @@ heap app. Gambar yang sama hanya diambil sekali walaupun baris dibangun ulang, d
 (1280 px) punya thread sendiri.
 
 **Aplikasi.** Baris Your apps hanya berisi favorit, tanpa nama di bawah tile (kalau ada, cuma nama itu
-yang kelihatan di atas Continue watching saat di-scroll). Barisnya ditutup garis pemisah tipis, lalu:
+yang kelihatan di atas Continue watching saat di-scroll). Barisnya ditutup garis pemisah tipis, lalu dua
+tile persegi (tinggi sama dengan tile app, ikon lebih kecil):
 
 - tile All apps (ikon kotak 3×3) yang membuka tab Apps;
 - tile Google TV (ikon rumah) yang membuka launcher bawaan. Redirect dilewati 3 detik setelah tile itu

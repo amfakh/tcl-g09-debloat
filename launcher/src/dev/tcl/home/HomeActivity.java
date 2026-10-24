@@ -1467,7 +1467,7 @@ public class HomeActivity extends Activity {
             art.setScaleType(ImageView.ScaleType.CENTER_CROP);
         }
         // The Your apps row shows no names: scrolled down, only the names would peek above the next row.
-        LinearLayout cell = tileShell(pkg, art, banner != null, movable ? null : ri.loadLabel(pm).toString());
+        LinearLayout cell = tileShell(pkg, art, banner != null, movable ? null : ri.loadLabel(pm).toString(), false);
         cell.setOnClickListener(v -> {
             noteUsed(pkg);
             if (LIVE_TV_PKG.equals(pkg)) {
@@ -1494,7 +1494,7 @@ public class HomeActivity extends Activity {
     private View allAppsTile() {
         Icon art = new Icon(this, Icon.GRID);
         art.setColor(TEXT);
-        LinearLayout cell = tileShell(ALL_APPS, art, false, null);
+        LinearLayout cell = tileShell(ALL_APPS, art, false, null, true);
         cell.setOnClickListener(v -> {
             showApps(true);
             View first = firstGridTile();
@@ -1515,7 +1515,7 @@ public class HomeActivity extends Activity {
         // Google TV's home has no icon of its own.
         Icon art = new Icon(this, Icon.HOME);
         art.setColor(TEXT);
-        LinearLayout cell = tileShell(STOCK_HOME, art, false, null);
+        LinearLayout cell = tileShell(STOCK_HOME, art, false, null, true);
         cell.setOnClickListener(v -> {
             HomeRedirectService.allowStockHome();
             start(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
@@ -1525,15 +1525,17 @@ public class HomeActivity extends Activity {
     }
 
     /**
-     * What every app tile looks like: a 16:9 card with a name under it, a ring and a lift on focus.
+     * What every app tile looks like: a 16:9 card (square for the All apps and Google TV tiles) with a
+     * name under it, a ring and a lift on focus.
      *
      * @param tag the tile's tag (its package)
      * @param art what fills the card
      * @param fills whether art fills the card (a banner) rather than sitting in its middle (an icon)
      * @param label the name under the card, or null for none
+     * @param square whether the card is square, with a smaller icon
      * @return the focusable tile, without click handlers
      */
-    private LinearLayout tileShell(String tag, View art, boolean fills, String label) {
+    private LinearLayout tileShell(String tag, View art, boolean fills, String label, boolean square) {
         LinearLayout cell = column();
         cell.setFocusable(true);
         cell.setTag(tag);
@@ -1548,11 +1550,11 @@ public class HomeActivity extends Activity {
         ring.setCornerRadius(px(16));
         card.setForeground(ring);
         card.addView(art, fills ? new FrameLayout.LayoutParams(-1, -1)
-            : new FrameLayout.LayoutParams(px(96), px(96), Gravity.CENTER));
+            : new FrameLayout.LayoutParams(px(square ? 64 : 96), px(square ? 64 : 96), Gravity.CENTER));
         // Shown only while the tile is being moved, toward the sides it can still move to.
         card.addView(chevron(Icon.CHEVRON_LEFT), chevronLp(Gravity.START));
         card.addView(chevron(Icon.CHEVRON_RIGHT), chevronLp(Gravity.END));
-        cell.addView(card, new LinearLayout.LayoutParams(px(240), px(135)));
+        cell.addView(card, new LinearLayout.LayoutParams(px(square ? 135 : 240), px(135)));
 
         TextView name = text(19, MUTED, false);
         if (label != null) {
