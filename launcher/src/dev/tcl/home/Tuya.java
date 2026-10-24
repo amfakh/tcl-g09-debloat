@@ -27,6 +27,8 @@ import javax.crypto.spec.SecretKeySpec;
 final class Tuya {
     private static final int PORT = 6668;
     private static final int TIMEOUT_MS = 3_000;
+    /** A real frame is a few hundred bytes; anything bigger is another service or the wrong protocol. */
+    private static final int MAX_FRAME = 16 * 1024;
     private static final int SESS_START = 3;
     private static final int SESS_RESP = 4;
     private static final int SESS_FINISH = 5;
@@ -57,6 +59,13 @@ final class Tuya {
         this.id = id;
         this.localKey = localKey.getBytes(StandardCharsets.UTF_8);
         this.version = version;
+    }
+
+    /**
+     * @return the address this client talks to
+     */
+    String host() {
+        return host;
     }
 
     /**
@@ -215,7 +224,7 @@ final class Tuya {
                     h.getShort();
                     h.getInt();
                     int cmd = h.getInt();
-                    byte[] rest = new byte[h.getInt()];
+                    byte[] rest = new byte[frameLength(h.getInt())];
                     in.readFully(rest);
                     in.readInt();
                     Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
@@ -230,7 +239,7 @@ final class Tuya {
                 }
                 in.readInt();
                 int cmd = in.readInt();
-                byte[] rest = new byte[in.readInt()];
+                byte[] rest = new byte[frameLength(in.readInt())];
                 in.readFully(rest);
                 int tail = version.equals("3.3") ? 8 : 36;
                 byte[] body = Arrays.copyOfRange(rest, 4, rest.length - tail);
@@ -245,6 +254,13 @@ final class Tuya {
             } catch (GeneralSecurityException e) {
                 throw new IOException(e);
             }
+        }
+
+        private int frameLength(int length) throws IOException {
+            if (length < 0 || length > MAX_FRAME) {
+                throw new IOException("not a Tuya frame");
+            }
+            return length;
         }
 
         /** @return "3.x" followed by twelve zero bytes, which control requests carry in front of the body */

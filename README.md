@@ -623,7 +623,8 @@ sesi, sama sensitifnya dengan password.
    Home Assistant, jadi script meminjam client id integrasi itu; pakai hanya untuk akun dan device
    sendiri, dan jangan dipublikasikan.
 3. **IP dan versi protokol** purifier dan fountain diambil dari `devices.json` di folder yang sama
-   (hasil `tinytuya wizard`) sampai discovery otomatis ada. Kasih IP tetap di router.
+   (hasil `tinytuya wizard`). IP itu cuma titik awal: kalau device tidak ada di sana lagi, launcher
+   mencarinya sendiri (lihat "Cara kerja") dan mengingat alamat barunya.
 4. **Kirim ke TV**: `tools/smart-home.sh` menulis `smart_home.json` ke
    `/sdcard/Android/data/dev.tcl.home/files/` lewat ADB: id, IP, local key, versi protokol, dan sesi
    cloud. Key tidak ada di repo atau APK. Tanpa file itu tab Devices kosong dan menampilkan petunjuk.
@@ -655,8 +656,13 @@ Daftar dibaca ulang saat Home dibuka dan setelah tiap OK. Purifier melapor state
 patuh, jadi setelah menyalakan atau mematikan, launcher menunggu sampai device melapor state yang
 diminta (maksimal sekitar 3 detik) sebelum menampilkannya.
 
-IP diambil dari `devices.json`. Kalau DHCP memberi IP baru, kartunya jadi "Not reachable" sampai
-`tools/smart-home.sh` dijalankan lagi; lebih mudah kasih IP tetap di router.
+Kalau device tidak menjawab di IP-nya, launcher menyapu /24 di sekitar IP itu: tiap alamat yang membuka
+port 6668 ditanyai dengan id dan local key device, dan hanya balasan yang terbaca sebagai state (`dps`)
+dianggap benar. Alamat yang ketemu diingat di TV dan dipakai lebih dulu pada pembacaan berikutnya. Purifier
+(3.5) tidak pernah mengumumkan dirinya lewat UDP di jaringan ini, bahkan untuk scanner `tinytuya`, jadi
+sapuan TCP inilah satu-satunya cara yang jalan untuk semua versi protokol. Satu panggilan lokal memakan
+sekitar 110 sampai 160 ms (3.3) dan 250 ms (3.5, kadang lebih dari satu detik), jadi koneksi tidak dibiarkan
+terbuka dengan heartbeat.
 
 ### Sudah dicek
 
@@ -665,8 +671,12 @@ IP diambil dari `devices.json`. Kalau DHCP memberi IP baru, kartunya jadi "Not r
 - Fountain (3.3) dari TV: OK menyala/mati dan balik lagi (24 Oktober 2026).
 - Signing dan enkripsi cloud: cocok dengan lima vektor test SDK resmi, di Python dan di Java. Membaca
   daftar device dan status dari cloud berhasil dari Mac.
-- Belum dicek dari TV: kartu AC lewat cloud, refresh token di Java, dan tampilan kartu device yang
-  baru (ikon, pill status, detail). Protokol 3.4 belum diuji, tidak ada device 3.4.
+- Kartu AC dari TV lewat cloud: Power, Mode, suhu naik dan turun terkirim, dan AC bereaksi.
+- Tampilan kartu device yang baru (ikon, pill status, detail) tampil di TV.
+- Pencarian ulang: dengan IP sengaja salah di `smart_home.json`, purifier (3.5) dan fountain (3.3) ketemu
+  sendiri dan kartunya terisi.
+- Belum dicek: refresh token cloud di Java (sesi masih baru waktu dites), dan protokol 3.4 (tidak ada
+  device 3.4).
 
 ## Menutup ADB
 

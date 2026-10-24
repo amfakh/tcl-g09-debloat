@@ -2,6 +2,7 @@ package dev.tcl.home;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -11,8 +12,14 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * The smart devices (Tuya: BARDI and Smart Life), shown as cards on the Devices tab. The purifier and the
@@ -27,7 +34,11 @@ final class SmartHome {
     /** Mode and fan values in the order Tuya numbers them for an IR air conditioner. */
     private static final String[] AC_MODES = {"Cool", "Heat", "Auto", "Fan", "Dry"};
     private static final String[] AC_FANS = {"Auto", "Low", "Mid", "High"};
+    private static final String TAG = "SmartHome";
     private static final String PREF_CLOUD = "cloud";
+    private static final int TUYA_PORT = 6668;
+    private static final int SWEEP_CONNECT_MS = 300;
+    private static final int SWEEP_THREADS = 48;
     /** What a device card's description holds: the state it is in. */
     static final String STATE_ON = "on";
     static final String STATE_OFF = "off";
@@ -44,6 +55,9 @@ final class SmartHome {
     /** One local device: what it is, how to reach it and whether it is on. */
     private static final class Device {
         String kind;
+        String id;
+        String key;
+        String version;
         Tuya tuya;
         boolean on;
     }
@@ -82,18 +96,23 @@ final class SmartHome {
                     }
                     Device d = new Device();
                     d.kind = o.getString("kind");
-                    d.tuya = new Tuya(o.getString("ip"), o.getString("id"), o.getString("key"), o.getString("version"));
+                    d.id = o.getString("id");
+                    d.key = o.getString("key");
+                    d.version = o.getString("version");
+                    // The address found last time wins over the pushed one: DHCP may have moved the device.
+                    d.tuya = new Tuya(prefs.getString("ip:" + d.id, o.getString("ip")), d.id, d.key, d.version);
                     read.add(d);
                     TvRows.Item item = new TvRows.Item();
                     item.title = d.kind.equals("purifier") ? "Air purifier" : "Water fountain";
                     item.packageName = d.kind;
                     item.action = "smart:" + (read.size() - 1);
                     try {
-                        JSONObject dps = new JSONObject(d.tuya.query()).getJSONObject("dps");
+                        JSONObject dps = new JSONObject(queryResolving(d)).getJSONObject("dps");
                         d.on = dps.getBoolean("1");
                         item.description = d.on ? STATE_ON : STATE_OFF;
                         detail(d, dps, item);
-                    } catch (IOException e) {
+                    } catch (IOException | JSONException | RuntimeException e) {
+                        Log.w(TAG, d.kind + " did not answer", e);
                         item.description = STATE_OFFLINE;
                     }
                     items.add(item);
@@ -119,7 +138,14 @@ final class SmartHome {
     void toggle(int index) throws IOException {
         Device d = devices.get(index);
         boolean want = !d.on;
-        d.tuya.control("{\"1\":" + want + "}");
+        try {
+            d.tuya.control("{\"1\":" + want + "}");
+        } catch (IOException e) {
+            if (!resolve(d)) {
+                throw e;
+            }
+            d.tuya.control("{\"1\":" + want + "}");
+        }
         // The purifier reports its new state a moment after it obeys; reading at once shows the old one.
         for (int i = 0; i < REPORT_TRIES; i++) {
             try {
@@ -201,6 +227,83 @@ final class SmartHome {
             items.add(item);
         }
         return items;
+    }
+
+    /** Asks the device for its state; when it does not answer where it was, looks for it on the network once. */
+    private String queryResolving(Device d) throws IOException {
+        try {
+            return state(d.tuya);
+        } catch (IOException e) {
+            if (!resolve(d)) {
+                throw e;
+            }
+            return state(d.tuya);
+        }
+    }
+
+    /**
+     * Asks a device for its state and checks the reply. A 3.3 device answers a wrong key, and another service
+     * answers on a reused address, with noise instead of an error: only a reply that reads as a state counts.
+     */
+    private static String state(Tuya tuya) throws IOException {
+        String reply = tuya.query();
+        try {
+            new JSONObject(reply).getJSONObject("dps");
+            return reply;
+        } catch (JSONException e) {
+            throw new IOException("not the device", e);
+        }
+    }
+
+    /**
+     * Looks for a device that moved: tries every address of the /24 around its old one that accepts a connection
+     * on the Tuya port, and keeps the one that answers to the device's id and local key. The purifier never
+     * announces itself over UDP, so a sweep is the one way to find it that works for every protocol version.
+     *
+     * @return whether the device was found, at an address now remembered
+     */
+    private boolean resolve(Device d) {
+        String old = d.tuya.host();
+        String prefix = old.substring(0, old.lastIndexOf('.') + 1);
+        ExecutorService pool = Executors.newFixedThreadPool(SWEEP_THREADS);
+        try {
+            List<Callable<String>> probes = new ArrayList<>();
+            for (int i = 1; i < 255; i++) {
+                String host = prefix + i;
+                if (host.equals(old)) {
+                    continue;
+                }
+                probes.add(() -> {
+                    try (Socket s = new Socket()) {
+                        s.connect(new InetSocketAddress(host, TUYA_PORT), SWEEP_CONNECT_MS);
+                    } catch (IOException e) {
+                        return null;
+                    }
+                    try {
+                        state(new Tuya(host, d.id, d.key, d.version));
+                        return host;
+                    } catch (IOException | RuntimeException e) {
+                        // Another device, or something else that listens on this port.
+                        return null;
+                    }
+                });
+            }
+            for (Future<String> found : pool.invokeAll(probes)) {
+                String host = found.get();
+                if (host != null) {
+                    d.tuya = new Tuya(host, d.id, d.key, d.version);
+                    prefs.edit().putString("ip:" + d.id, host).apply();
+                    return true;
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (java.util.concurrent.ExecutionException e) {
+            // A probe that fails is a host that is not the device.
+        } finally {
+            pool.shutdownNow();
+        }
+        return false;
     }
 
     /**
