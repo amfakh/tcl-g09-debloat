@@ -34,6 +34,15 @@ final class SmartHome {
     /** Mode and fan values in the order Tuya numbers them for an IR air conditioner. */
     private static final String[] AC_MODES = {"Cool", "Heat", "Auto", "Fan", "Dry"};
     private static final String[] AC_FANS = {"Auto", "Low", "Mid", "High"};
+    /**
+     * The air conditioner's card colour by mode: Cool blue, Heat red, Auto yellow, Fan green, Dry purple. None is
+     * grey (that reads as off) and the two used most, Cool and Dry, are far apart.
+     */
+    private static final int[] AC_MODE_COLORS = {0xFF4285F4, 0xFFEA4335, 0xFFFBBC04, 0xFF34A853, 0xFFA142F4};
+    /** How long the fountain's filter lasts, in days, as the BARDI app counts it. */
+    private static final int FOUNTAIN_FILTER_DAYS = 30;
+    /** How often the fountain wants cleaning, in days. */
+    private static final int FOUNTAIN_CLEAN_DAYS = 7;
     private static final String TAG = "SmartHome";
     private static final String PREF_CLOUD = "cloud";
     private static final int TUYA_PORT = 6668;
@@ -81,6 +90,7 @@ final class SmartHome {
     List<TvRows.Item> read() {
         List<Device> read = new ArrayList<>();
         List<TvRows.Item> items = new ArrayList<>();
+        List<TvRows.Item> sensors = new ArrayList<>();
         acId = null;
         if (file.exists()) {
             try {
@@ -105,6 +115,10 @@ final class SmartHome {
                     d.tuya = new Tuya(prefs.getString("ip:" + d.id, o.getString("ip")), d.id, d.key, d.version);
                     read.add(d);
                     TvRows.Item item = new TvRows.Item();
+                    if (d.kind.equals("sensor")) {
+                        sensors.add(sensorItem(d));
+                        continue;
+                    }
                     item.title = d.kind.equals("purifier") ? "Air purifier" : "Water fountain";
                     item.packageName = d.kind;
                     item.action = "smart:" + (read.size() - 1);
@@ -123,6 +137,8 @@ final class SmartHome {
                 if (acId != null) {
                     items.add(acItem());
                 }
+                // Last: Down from the tabs lands on the first card, which should be one that does something.
+                items.addAll(sensors);
             } catch (IOException | JSONException e) {
                 items.clear();
                 read.clear();
@@ -170,8 +186,8 @@ final class SmartHome {
      * value is only remembered once the cloud has accepted it; a refusal is remembered too, so the card can say
      * it was not sent.
      *
-     * @param what "power" (the other one), "up" or "down" (one degree), "mode:N" or "fan:N" (the numbers Tuya
-     *     uses for an IR air conditioner)
+     * @param what "power" (the other one), "up" or "down" (one degree), "temp:N", "mode:N" or "fan:N" (the
+     *     numbers Tuya uses for an IR air conditioner)
      * @throws IOException when the cloud does not take the command
      */
     void sendAc(String what) throws IOException {
@@ -181,7 +197,10 @@ final class SmartHome {
         int fan = prefs.getInt("ac_fan", 0);
         try {
             JSONObject command = new JSONObject();
-            if (what.equals("power")) {
+            if (what.startsWith("temp:")) {
+                temp = Math.max(acMinTemp, Math.min(acMaxTemp, Integer.parseInt(what.substring("temp:".length()))));
+                command.put("code", "T").put("value", temp);
+            } else if (what.equals("power")) {
                 power = !power;
                 command.put("code", power ? "PowerOn" : "PowerOff").put("value", power ? "PowerOn" : "PowerOff");
             } else if (what.equals("up") || what.equals("down")) {
@@ -198,6 +217,7 @@ final class SmartHome {
         } catch (JSONException e) {
             throw new IOException(e);
         } catch (IOException e) {
+            Log.w(TAG, "the cloud did not take " + what, e);
             prefs.edit().putBoolean("ac_failed", true).apply();
             throw e;
         }
@@ -258,6 +278,28 @@ final class SmartHome {
         }
     }
 
+    /**
+     * The IR hub's card: it only measures, so it has the room's temperature and humidity (data points 101, in tenths
+     * of a degree, and 102) and nothing to switch.
+     */
+    private TvRows.Item sensorItem(Device d) {
+        TvRows.Item item = new TvRows.Item();
+        item.title = "Smart IR";
+        item.packageName = d.kind;
+        try {
+            JSONObject dps = new JSONObject(queryResolving(d)).getJSONObject("dps");
+            d.dps = dps;
+            item.description = STATE_ON;
+            item.statIcons = new int[] {Icon.THERMO, Icon.DROP};
+            item.statTexts = new String[] {
+                String.format(java.util.Locale.ROOT, "%.1f°C", dps.optInt("101") / 10.0), dps.optInt("102") + "%"};
+        } catch (IOException | JSONException | RuntimeException e) {
+            Log.w(TAG, "sensor did not answer", e);
+            item.description = STATE_OFFLINE;
+        }
+        return item;
+    }
+
     /** The air conditioner's card, from what was last sent to it: an IR remote reports nothing back. */
     private TvRows.Item acItem() {
         TvRows.Item item = new TvRows.Item();
@@ -268,8 +310,10 @@ final class SmartHome {
             item.description = STATE_OFFLINE;
         } else if (prefs.getBoolean("ac_power", false)) {
             item.description = STATE_ON;
-            item.episode = AC_MODES[prefs.getInt("ac_mode", 0)] + "  ·  " + prefs.getInt("ac_temp", 24) + "°C  ·  Fan "
-                + AC_FANS[prefs.getInt("ac_fan", 0)];
+            item.accent = AC_MODE_COLORS[prefs.getInt("ac_mode", 0)];
+            item.statIcons = new int[] {-1, -1, Icon.WIND};
+            item.statTexts = new String[] {AC_MODES[prefs.getInt("ac_mode", 0)], prefs.getInt("ac_temp", 24) + "°C",
+                AC_FANS[prefs.getInt("ac_fan", 0)]};
         } else {
             item.description = STATE_OFF;
         }
@@ -373,18 +417,33 @@ final class SmartHome {
         return new TuyaCloud(session, s -> prefs.edit().putString(PREF_CLOUD, s.toString()).apply());
     }
 
-    /** Fills the detail line of a device that is on: air quality and filter, or UV and filter. */
+    /**
+     * Fills the detail line of a device that is on (air quality and filter, or UV and filter) and, on or off, how
+     * much filter is left (and for the fountain also how long until cleaning), for the bars at the bottom of the
+     * card.
+     */
     private static void detail(Device d, JSONObject dps, TvRows.Item item) {
+        boolean purifier = d.kind.equals("purifier");
+        item.positionMs = purifier ? dps.optInt("5") : dps.optInt("7");
+        item.durationMs = purifier ? 100 : FOUNTAIN_FILTER_DAYS;
+        if (!purifier) {
+            item.progress2 = Math.max(0, Math.min(1, dps.optInt("4") / (float) FOUNTAIN_CLEAN_DAYS));
+        }
         if (!d.on) {
             return;
         }
         if (d.kind.equals("purifier")) {
             int pm25 = dps.optInt("2");
-            item.episode = "PM2.5 " + pm25 + "  ·  Filter " + dps.optInt("5") + "%";
+            item.statIcons = new int[] {Icon.PARTICLES, Icon.FILTER};
+            item.statTexts = new String[] {String.valueOf(pm25), dps.optInt("5") + "%"};
             // The same pastel scale as the air quality pill at the top right of Home.
             item.accent = pm25 <= 12 ? 0xFFD9EAD3 : pm25 <= 35 ? 0xFFFFF2CC : pm25 <= 55 ? 0xFFFCE5CD : 0xFFF4CCCC;
         } else {
-            item.episode = (dps.optBoolean("14") ? "UV on" : "UV off") + "  ·  Filter " + dps.optInt("7") + " days";
+            item.statIcons = new int[] {Icon.FILTER, Icon.SPARKLE};
+            item.statTexts = new String[] {dps.optInt("7") + " days", dps.optInt("4") + " days"};
+            // Green while most of the filter is left, then yellow, then red when it is nearly used up.
+            float left = item.progress();
+            item.accent = left > 0.5f ? 0xFFD9EAD3 : left > 0.15f ? 0xFFFFF2CC : 0xFFF4CCCC;
         }
     }
 }

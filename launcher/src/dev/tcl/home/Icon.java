@@ -31,6 +31,10 @@ final class Icon extends View {
     static final int HOME = 15;
     static final int WIND = 16;
     static final int SNOW = 17;
+    static final int PARTICLES = 18;
+    static final int FILTER = 19;
+    static final int SPARKLE = 20;
+    static final int THERMO = 21;
 
     private int kind;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -122,6 +126,43 @@ final class Icon extends View {
                     canvas.drawRoundRect(new RectF(x, y, x + 4, y + 4), 1, 1, paint);
                 }
             }
+        } else if (kind == PARTICLES) {
+            // Dust in the air, for PM2.5: dots of a few sizes.
+            paint.setStyle(Paint.Style.FILL);
+            canvas.drawCircle(6, 7, 2, paint);
+            canvas.drawCircle(15, 5.5f, 1.5f, paint);
+            canvas.drawCircle(11, 12, 2.5f, paint);
+            canvas.drawCircle(18.5f, 13, 2, paint);
+            canvas.drawCircle(6.5f, 17.5f, 1.5f, paint);
+            canvas.drawCircle(14.5f, 19, 2, paint);
+            paint.setStyle(Paint.Style.STROKE);
+        } else if (kind == THERMO) {
+            // A thermometer: a stem with a bulb at the bottom and a few marks.
+            canvas.drawRoundRect(new RectF(9.5f, 2.5f, 14.5f, 15.5f), 2.5f, 2.5f, paint);
+            canvas.drawCircle(12, 18, 3.5f, paint);
+            canvas.drawLine(16.5f, 6, 19, 6, paint);
+            canvas.drawLine(16.5f, 9.5f, 19, 9.5f, paint);
+        } else if (kind == SPARKLE) {
+            // Clean: a four-point sparkle and a small one beside it.
+            Path star = new Path();
+            star.moveTo(10, 3);
+            star.quadTo(10, 10, 17, 10.5f);
+            star.quadTo(10, 11, 10, 18);
+            star.quadTo(10, 11, 3, 10.5f);
+            star.quadTo(10, 10, 10, 3);
+            star.close();
+            canvas.drawPath(star, paint);
+            canvas.drawLine(18, 15, 18, 21, paint);
+            canvas.drawLine(15, 18, 21, 18, paint);
+        } else if (kind == FILTER) {
+            // A filter cartridge seen from the front: a frame with a mesh inside.
+            canvas.drawRoundRect(new RectF(4, 4, 20, 20), 3, 3, paint);
+            paint.setStrokeWidth(1.5f);
+            for (float at = 9.33f; at < 19; at += 5.33f) {
+                canvas.drawLine(at, 4, at, 20, paint);
+                canvas.drawLine(4, at, 20, at, paint);
+            }
+            paint.setStrokeWidth(2f);
         } else if (kind == SNOW) {
             for (int i = 0; i < 3; i++) {
                 canvas.save();

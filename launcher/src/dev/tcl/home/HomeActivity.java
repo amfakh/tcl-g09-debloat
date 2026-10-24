@@ -1236,7 +1236,7 @@ public class HomeActivity extends Activity {
      * the bottom. OK switches it on or off. The card paints itself again from a new item when the state is read
      * again, so the card that has focus is never replaced.
      *
-     * @param item the device; its description is the state, its episode the detail line
+     * @param item the device; its description is the state, its stats the detail line
      * @return the focusable card
      */
     private View deviceCard(TvRows.Item item) {
@@ -1284,29 +1284,45 @@ public class HomeActivity extends Activity {
         bottom.addView(title);
         LinearLayout detailRow = new LinearLayout(this);
         detailRow.setGravity(Gravity.CENTER_VERTICAL);
-        GradientDrawable detailDot = new GradientDrawable();
-        detailDot.setShape(GradientDrawable.OVAL);
-        View detailDotView = new View(this);
-        detailDotView.setBackground(detailDot);
-        LinearLayout.LayoutParams detailDotLp = new LinearLayout.LayoutParams(px(10), px(10));
-        detailDotLp.rightMargin = px(8);
-        detailRow.addView(detailDotView, detailDotLp);
-        TextView detail = text(18, Color.argb(180, 255, 255, 255), false);
-        detail.setSingleLine(true);
-        detail.setEllipsize(TextUtils.TruncateAt.END);
-        detailRow.addView(detail);
         LinearLayout.LayoutParams detailLp = new LinearLayout.LayoutParams(-1, px(24));
         detailLp.topMargin = px(2);
         bottom.addView(detailRow, detailLp);
         FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
-        bottomLp.setMargins(px(16), 0, px(16), px(14));
+        bottomLp.setMargins(px(16), 0, px(16), px(26));
         card.addView(bottom, bottomLp);
+
+        // What is left, as thin bars along the bottom like the progress of a content card. The purifier has one
+        // (its filter) across the card; the fountain has two side by side, each under its own reading (filter,
+        // then the days until cleaning).
+        LinearLayout barsRow = new LinearLayout(this);
+        FrameLayout[] halves = new FrameLayout[2];
+        View[] bars = new View[2];
+        for (int i = 0; i < 2; i++) {
+            halves[i] = new FrameLayout(this);
+            halves[i].setBackgroundColor(Color.argb(60, 255, 255, 255));
+            bars[i] = new View(this);
+            bars[i].setPivotX(0);
+            bars[i].setScaleX(0);
+            halves[i].addView(bars[i], new FrameLayout.LayoutParams(-1, -1));
+            LinearLayout.LayoutParams halfLp = new LinearLayout.LayoutParams(0, -1, 1f);
+            halfLp.leftMargin = i > 0 ? px(16) : 0;
+            barsRow.addView(halves[i], halfLp);
+        }
+        FrameLayout.LayoutParams barsLp = new FrameLayout.LayoutParams(-1, px(4), Gravity.BOTTOM);
+        barsLp.setMargins(px(16), 0, px(16), px(12));
+        card.addView(barsRow, barsLp);
 
         java.util.function.Consumer<TvRows.Item> paint = now -> {
             String state = now.description;
             boolean on = SmartHome.STATE_ON.equals(state);
             boolean off = SmartHome.STATE_OFF.equals(state);
-            fill.setColors(on ? new int[] {Color.rgb(0x34, 0x40, 0x4B), Color.rgb(0x2A, 0x2C, 0x31)}
+            // On, the card takes on the colour of what it measures: air quality for the purifier, filter for the
+            // fountain. The item carries the step as a pastel, too pale to show on a dark card, so the card uses
+            // the saturated colour of the same step.
+            int vivid = vivid(now.accent);
+            int base = Color.rgb(0x2A, 0x2C, 0x31);
+            fill.setColors(on && vivid != 0 ? new int[] {blend(vivid, base, 0.5f), blend(vivid, base, 0.28f)}
+                : on ? new int[] {Color.rgb(0x34, 0x40, 0x4B), base}
                 : off ? new int[] {Color.rgb(0x23, 0x25, 0x29), Color.rgb(0x23, 0x25, 0x29)}
                 : new int[] {Color.rgb(0x2A, 0x2C, 0x31), Color.rgb(0x2A, 0x2C, 0x31)});
             chipBg.setColor(on ? Color.argb(41, 207, 223, 237) : Color.argb(18, 255, 255, 255));
@@ -1315,10 +1331,42 @@ public class HomeActivity extends Activity {
             pillDot.setColor(on ? Color.rgb(0x2E, 0x7D, 0x32) : off ? Color.rgb(0x8B, 0x8F, 0x94) : Color.rgb(0xB4, 0x53, 0x09));
             pillText.setTextColor(on ? Color.rgb(0x0E, 0x0E, 0x0F) : off ? Color.rgb(0xC4, 0xC7, 0xCB) : Color.rgb(0x17, 0x18, 0x1B));
             pillText.setText(on ? "On" : off ? "Off" : "Not reachable");
+            // A sensor is never switched, so it says nothing about being on; only that it cannot be reached.
+            pill.setVisibility("sensor".equals(now.packageName) && on ? View.GONE : View.VISIBLE);
             title.setTextColor(on ? Color.WHITE : Color.argb(184, 255, 255, 255));
-            detail.setText(on && now.episode != null ? now.episode : "");
-            detailDotView.setVisibility(on && now.accent != 0 ? View.VISIBLE : View.GONE);
-            detailDot.setColor(now.accent);
+            // Each reading is an icon and its value. With two bars (the fountain) each reading takes the half of
+            // the card above its own bar.
+            boolean split = now.progress2 >= 0;
+            detailRow.removeAllViews();
+            for (int i = 0; on && now.statTexts != null && i < now.statTexts.length; i++) {
+                LinearLayout reading = new LinearLayout(this);
+                reading.setGravity(Gravity.CENTER_VERTICAL);
+                if (now.statIcons[i] >= 0) {
+                    Icon stat = new Icon(this, now.statIcons[i]);
+                    stat.setColor(Color.argb(200, 255, 255, 255));
+                    LinearLayout.LayoutParams statLp = new LinearLayout.LayoutParams(px(20), px(20));
+                    statLp.rightMargin = px(6);
+                    reading.addView(stat, statLp);
+                }
+                TextView value = text(18, Color.argb(200, 255, 255, 255), false);
+                value.setText(now.statTexts[i]);
+                reading.addView(value);
+                LinearLayout.LayoutParams readingLp = split ? new LinearLayout.LayoutParams(0, -2, 1f)
+                    : new LinearLayout.LayoutParams(-2, -2);
+                readingLp.leftMargin = i > 0 ? px(split ? 16 : 18) : 0;
+                detailRow.addView(reading, readingLp);
+            }
+            float[] left = {now.progress(), now.progress2};
+            boolean reachable = !SmartHome.STATE_OFFLINE.equals(state);
+            for (int i = 0; i < 2; i++) {
+                boolean shown = left[i] >= 0 && reachable;
+                halves[i].setVisibility(shown ? View.VISIBLE : View.GONE);
+                if (shown) {
+                    bars[i].setBackgroundColor(left[i] <= 0.15f ? Color.rgb(0xFC, 0xE5, 0xCD)
+                        : on ? Color.rgb(0xCF, 0xDF, 0xED) : Color.rgb(0x8B, 0x8F, 0x94));
+                    bars[i].animate().scaleX(Math.max(0.01f, left[i])).setDuration(400).start();
+                }
+            }
         };
         paint.accept(item);
         card.setTag(paint);
@@ -1330,6 +1378,10 @@ public class HomeActivity extends Activity {
             v.animate().scaleX(has ? 1.06f : 1f).scaleY(has ? 1.06f : 1f).setDuration(150).start();
             ring.setStroke(has ? px(4) : 0, TEXT);
         });
+        if ("sensor".equals(item.packageName)) {
+            // It can be focused like the other cards, but there is nothing to press or hold.
+            return card;
+        }
         card.setOnClickListener(v -> switchSmart(item));
         card.setOnLongClickListener(v -> {
             options.show(item.action, item.title, iconFor(item.packageName), v);
@@ -1338,8 +1390,42 @@ public class HomeActivity extends Activity {
         return card;
     }
 
+    /**
+     * @param top the colour mixed in
+     * @param base the colour it is mixed into
+     * @param amount how much of top, from 0 to 1
+     * @return the mix
+     */
+    private static int blend(int top, int base, float amount) {
+        return Color.rgb(
+            Math.round(Color.red(top) * amount + Color.red(base) * (1 - amount)),
+            Math.round(Color.green(top) * amount + Color.green(base) * (1 - amount)),
+            Math.round(Color.blue(top) * amount + Color.blue(base) * (1 - amount)));
+    }
+
+    /**
+     * @param pastel a step of the pastel scale (the same as the air quality pill)
+     * @return the saturated colour of the same step (green, yellow, orange, red); any other colour as it is
+     */
+    private static int vivid(int pastel) {
+        switch (pastel) {
+            case 0xFFD9EAD3:
+                return 0xFF34A853;
+            case 0xFFFFF2CC:
+                return 0xFFFBBC04;
+            case 0xFFFCE5CD:
+                return 0xFFFA7B17;
+            case 0xFFF4CCCC:
+                return 0xFFEA4335;
+            default:
+                // Already a saturated colour, such as the air conditioner's mode.
+                return pastel;
+        }
+    }
+
     private static int iconFor(String kind) {
-        return "purifier".equals(kind) ? Icon.WIND : "ac".equals(kind) ? Icon.SNOW : Icon.DROP;
+        return "purifier".equals(kind) ? Icon.WIND : "ac".equals(kind) ? Icon.SNOW
+            : "sensor".equals(kind) ? Icon.THERMO : Icon.DROP;
     }
 
     /**

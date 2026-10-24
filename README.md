@@ -600,7 +600,8 @@ mengendalikannya.
 |---|---|---|
 | Air purifier (KJ236, protokol 3.5) | Lokal | OK menyala/mati. Detail: PM2.5 dan sisa filter |
 | Water fountain (BARDI Lite, protokol 3.3) | Lokal | OK menyala/mati. Detail: UV dan sisa filter (hari) |
-| AC, lewat hub Smart IR | Cloud | OK menyala/mati. Detail: mode, suhu, kipas yang terakhir dikirim |
+| AC, lewat hub Smart IR | Cloud | OK menyala/mati. Detail: mode, suhu, kipas yang terakhir dikirim. Warna menurut mode: Cool biru, Dry ungu, Heat merah, Fan hijau, Auto kuning |
+| Smart IR (hub, protokol 3.3) | Lokal | Hanya sensor: suhu dan kelembapan ruangan (DP 101 dalam persepuluhan derajat, DP 102). Bisa difokus, tapi tidak bisa dipencet atau ditahan |
 
 OK sekali di kartu menyalakan atau mematikan device. **Tahan OK** membuka menu opsinya di panel kanan
 (Back menutup):
@@ -608,8 +609,16 @@ OK sekali di kartu menyalakan atau mematikan device. **Tahan OK** membuka menu o
 | Device | Isi menu |
 |---|---|
 | Air purifier | Mode (Silent, Auto, 1, 2), child lock, meter sisa filter dan reset filter |
-| Water fountain | Meter sisa filter (hari, dari 90) dan sisa clean (hari, dari 31), masing-masing dengan reset |
-| AC | Power, suhu − dan + (satu derajat, 16 sampai 30), Mode (Cool, Heat, Auto, Fan, Dry), Fan (Auto, Low, Mid, High) |
+| Water fountain | Meter sisa filter (hari, dari 30) dan sisa clean (hari, dari 7), masing-masing dengan reset |
+| AC | Suhu − dan + (satu derajat), atau OK di angkanya untuk memilih langsung 16 sampai 30; Mode (Cool, Heat, Auto, Fan, Dry); Fan (Auto, Low, Mid, High) |
+
+Saat menyala, background kartu purifier berwarna sesuai PM2.5 dan kartu fountain sesuai sisa filter (hijau,
+kuning, oranye, merah, langkah yang sama dengan pill AQI). Baris detail memakai ikon dan nilai: partikel untuk
+PM2.5, kotak berjaring untuk sisa filter, dan kilau untuk sisa hari sampai fountain dibersihkan. Kartu
+purifier punya bar tipis di bawah untuk sisa filter. Kartu fountain dibelah dua: sisa filter di kiri dan sisa
+hari sampai dibersihkan di kanan, masing-masing dengan bar sendiri di bawahnya. Di menu, tombol yang difokus
+terisi putih, dan nilai yang sedang dipakai device diberi warna biru dengan garis tepi biru. Panel meluncur
+masuk dari kanan dan keluar lagi saat Back.
 
 Tombol reset butuh dua kali OK (teksnya berubah jadi "Press OK again to reset" dan batal sendiri setelah 4
 detik). Isi panel selalu dicat dari yang dilaporkan device setelah perubahan, bukan dari tombol yang
@@ -686,6 +695,9 @@ terbuka dengan heartbeat.
   daftar device dan status dari cloud berhasil dari Mac.
 - Kartu AC dari TV lewat cloud: Power, Mode, suhu naik dan turun terkirim, dan AC bereaksi.
 - Tampilan kartu device yang baru (ikon, pill status, detail) tampil di TV.
+- Menu opsi purifier dari TV: mode Silent, Auto, 1, dan 2 terkirim ke device (DP 4 berubah jadi `S`, `A`,
+  `1`, `2`, dibaca langsung dari device) dan child lock bisa dimatikan dan dinyalakan (24 Oktober 2026).
+  Dua tombol reset dan kontrol AC di panel belum dites.
 - Pencarian ulang: dengan IP sengaja salah di `smart_home.json`, purifier (3.5) dan fountain (3.3) ketemu
   sendiri dan kartunya terisi.
 - Belum dicek: refresh token cloud di Java (sesi masih baru waktu dites), dan protokol 3.4 (tidak ada
