@@ -15,7 +15,6 @@ import android.view.View;
  */
 final class Icon extends View {
     static final int SEARCH = 0;
-    static final int PICTURE = 1;
     static final int GEAR = 2;
     static final int SUN = 3;
     static final int MOON = 4;
@@ -36,7 +35,7 @@ final class Icon extends View {
 
     /**
      * @param context the context
-     * @param kind SEARCH, PICTURE, GEAR or a weather kind
+     * @param kind SEARCH, GEAR or a weather kind
      */
     Icon(Context context, int kind) {
         super(context);
@@ -77,16 +76,6 @@ final class Icon extends View {
         if (kind == SEARCH) {
             canvas.drawCircle(11, 11, 6.5f, paint);
             canvas.drawLine(16, 16, 20, 20, paint);
-        } else if (kind == PICTURE) {
-            canvas.drawRoundRect(new RectF(3.5f, 5, 20.5f, 19), 2.5f, 2.5f, paint);
-            Path hills = new Path();
-            hills.moveTo(6.5f, 16);
-            hills.lineTo(10.5f, 11.5f);
-            hills.lineTo(13.5f, 14.5f);
-            hills.lineTo(15.5f, 12.5f);
-            hills.lineTo(17.5f, 16);
-            canvas.drawPath(hills, paint);
-            canvas.drawCircle(15.5f, 9, 1.2f, paint);
         } else if (kind == SUN) {
             sun(canvas, 12, 12, 4, 7.5f);
         } else if (kind == MOON) {

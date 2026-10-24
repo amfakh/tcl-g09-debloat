@@ -263,20 +263,23 @@ Plex disimpan di penyimpanan privat app di TV, bukan di `config.xml`.
 ### Layar Home
 
 **Top bar.** Kiri ke kanan: foto user Plex (huruf `profile_initial` sebelum fotonya kebaca), yang
-membuka pemilih profil Google TV; pill Search / Home / Apps; pill ambient (screensaver, sekarang
-Aerial Views) dan Settings. Di kanan ada jam besar, dan di bawahnya rata kanan: ikon cuaca, suhu,
-peluang hujan, dan pill AQI.
+membuka pemilih profil Google TV; pill Home / Apps; pill Search dan Settings. Di kanan ada jam besar,
+dan di bawahnya rata kanan: ikon cuaca, suhu, peluang hujan, dan pill AQI.
 
-- Seperti di Google TV, tab Home dan Apps berganti begitu difokus, tanpa OK. Search membuka pencarian
-  suara Google TV saat OK ditekan. Di Google TV, Search juga tab yang berganti saat difokus, tapi
-  halamannya ada di dalam launcher Google TV sendiri dan tidak bisa dipanggil app lain. Kalau Search
-  di sini dibuka saat difokus, overlay suara akan muncul setiap fokus lewat.
+- Seperti di Google TV, tab Home dan Apps berganti begitu difokus, tanpa OK. Search dan Settings
+  baru terbuka saat OK ditekan, jadi keduanya ada di pill kanan, terpisah dari tab. Search membuka
+  pencarian suara Google TV. Di Google TV, Search juga tab yang berganti saat difokus, tapi halamannya
+  ada di dalam launcher Google TV sendiri dan tidak bisa dipanggil app lain. Kalau Search di sini
+  dibuka saat difokus, overlay suara akan muncul setiap fokus lewat.
+- Kiri di tab Home dan kanan di Settings tidak ke mana-mana, jadi fokus tidak loncat ke baris di
+  bawah.
 - Warnanya diukur dari screenshot launcher bawaan: tab yang difokus berisi biru keabuan muda
   `#CFDFED` dengan teks hampir hitam, tombol ikon yang difokus berisi lingkaran `#E4F3FF` dengan
-  namanya muncul di bawah ("Search", "Screensaver", "Settings"), tab yang sedang tampil tapi tidak
-  difokus berisi abu `#373E42`, tombol ikon yang diam punya lingkaran samar `#313234`, dan teks di
-  pill yang tidak sedang difokus meredup ke `#ADB0B3`. Isian fokus tidak membesar, supaya tetap di
-  dalam pill.
+  namanya muncul di bawah ("Search", "Settings"), tab yang sedang tampil tapi tidak difokus berisi abu
+  `#373E42`, tombol ikon yang diam punya lingkaran samar `#313234`, dan teks di pill yang tidak sedang
+  difokus meredup ke `#ADB0B3`. Isian tab adalah satu highlight yang bergeser di bawah Home dan Apps
+  (220 ms), sambil berganti warna antara isian fokus dan isian tab aktif. Isian fokus tidak membesar,
+  supaya tetap di dalam pill.
 - Gradasi gelap di belakang top bar menjaga jam tetap kebaca di atas siaran atau gambar yang terang.
 
 **Hero.** Hero selalu siaran antena full-screen di belakang, dengan ikon TV dari app Live TV bawaan
@@ -289,9 +292,11 @@ muncul (setengah detik setelah tulisan terakhirnya). Fokus awal ada di tile pert
 selama siaran tampil, dan OK di tile TV membuka Live TV full-screen di channel yang sama. Fokus di
 kartu mana pun mengganti hero dengan item kartu itu: gambar item full-screen, logo app dan nama baris
 asalnya, judul, meta, dan deskripsi dua baris. Begitu fokus kembali ke Your apps, hero kembali ke
-siaran. Selama hero menampilkan item, siaran tetap jalan di belakang, suaranya juga, jadi siarannya
-langsung ada tanpa memuat channel lagi. Tuner baru dilepas saat TCL Home tidak tampil (aplikasi lain
-dibuka).
+siaran. Geser kiri-kanan di Your apps tidak menyentuh hero yang sudah menampilkan siaran, jadi teksnya
+tidak berkedip. Selama hero menampilkan item, siaran tetap jalan di belakang, suaranya juga, jadi
+siarannya langsung ada tanpa memuat channel lagi. Tuner baru dilepas saat aplikasi lain menutupi TCL
+Home (`onStop`), atau tepat sebelum tile TV membuka Live TV. Tombol Home dan panel quick settings TCL
+(`com.tcl.dashboard`) cuma mem-pause TCL Home, jadi siaran jalan terus tanpa tune ulang.
 
 **Baris.** Your apps dan Continue watching selalu paling atas. Baris di bawahnya (Recommendations from
 Plex, YouTube Recommended for you, Recently added, YouTube Subscriptions, Spotify, Movies in your
@@ -344,14 +349,16 @@ card, hanya ke arah yang masih bisa dituju. Kiri/kanan menggeser tile di antara 
 melewati tile All apps), lalu OK atau Back menyimpan.
 
 **Navigasi.** Atas dari Your apps ke tab aktif, bawah dari top bar ke kartu terakhir yang difokus (atau
-aplikasi pertama).
+aplikasi pertama). Back dan Home dari mana pun di TCL Home kembali ke tab Home dengan fokus di tile
+pertama dan baris di atas, tanpa memuat ulang siaran. Di grid Apps, satu Down ke baris terakhir
+langsung menggulir sampai bawah grid.
 
 **Animasi.** Lapisan gelap berisi gambar hero fade masuk di atas siaran saat pindah ke item, dan fade
 keluar saat kembali ke siaran. Gambar hero berganti dengan crossfade (dua `ImageView` bergantian), dan
 teks hero fade sambil naik sedikit setiap item berganti. Gambar kartu yang baru selesai diunduh fade
 masuk; yang sudah ada di cache langsung tampil. Tab Home dan Apps berganti dengan crossfade. Kartu dan
-tile membesar saat difokus. Warna pill di top bar berganti dengan transisi, juga saat fokus naik dari
-kartu ke top bar. Durasinya 200–320 ms, dikali skala animasi sistem (di TV ini sudah disetel ke 1;
+tile membesar saat difokus. Highlight tab bergeser antara Home dan Apps, dan warna pill di top bar
+berganti dengan transisi, juga saat fokus naik dari kartu ke top bar. Durasinya 200–320 ms, dikali skala animasi sistem (di TV ini sudah disetel ke 1;
 bawaannya 0,5).
 
 ### Live TV
@@ -476,7 +483,12 @@ Lewat `dumpsys`, struktur UI dari `uiautomator`, dan screenshot (22–23 Oktober
 | Favorit | Add dari grid lalu Remove dari Home; Move tidak bisa melewati tile All apps; chevron hanya ke arah yang mungkin |
 | Menu tile | App info membuka halaman app di Settings; tile app sistem tanpa Uninstall |
 | Cuaca dan AQI | Suhu, kode cuaca, peluang hujan, dan AQI sama dengan jawaban Open-Meteo yang dibaca langsung dari Mac |
-| Top bar | Profil membuka pemilih profil Google TV, ambient memulai Aerial Views, Settings membuka Settings, Search membuka pencarian suara |
+| Top bar | Profil membuka pemilih profil Google TV, Settings membuka Settings, Search membuka pencarian suara. Kiri di Home dan kanan di Settings tetap di tempat |
+| Highlight tab | Terekam bergeser di tengah jalan antara Apps dan Home (`screenrecord`); 90 frame saat pindah tab 6 kali, 1 janky, median 15 ms |
+| Home dan quick settings | TCL Home hanya pause; 0 baris log `TvInputManagerService` (CH+ sebagai pembanding: 50 baris) |
+| Back | Dari kartu Continue watching kembali ke tile TV, tanpa tune ulang |
+| Tile TV setelah tuner dilepas lebih awal | Live TV tampil dan `onVideoAvailable` |
+| Grid Apps | Satu Down ke baris terakhir langsung sampai bawah; Down berikutnya tidak menggeser apa pun |
 | Login Plex | Kode tampil, setelah dimasukkan di plex.tv/link layar menutup sendiri |
 
 Belum dicek: tombol fisik di remote (Home, tombol aplikasi, mic, menahan volume, menahan OK di tile,

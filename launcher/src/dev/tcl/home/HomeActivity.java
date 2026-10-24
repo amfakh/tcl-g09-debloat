@@ -115,6 +115,11 @@ public class HomeActivity extends Activity {
     private TextView aqiPill;
     // Repaint each top-bar pill button for the current focus.
     private final List<Runnable> pillPainters = new ArrayList<>();
+    // The fill that slides between the Home and Apps tabs, its color now, and its running animation.
+    private View tabHighlight;
+    private GradientDrawable tabHighlightBg;
+    private int tabHighlightColor;
+    private ValueAnimator tabHighlightAnim;
     // The name shown under a focused tool button.
     private TextView tip;
     private View weatherLine;
@@ -148,6 +153,8 @@ public class HomeActivity extends Activity {
     private final Runnable retryPlexRows = () -> loadRows(true);
     // Whether Home is on screen: Plex rows are only retried then.
     private boolean resumed;
+    // Whether another app hid Home since it was last on screen (true until the first onResume).
+    private boolean hidden = true;
     // An app writes its rows one program at a time: wait for the writes to settle before reading them.
     private final ContentObserver tvRowsChanged = new ContentObserver(handler) {
         /**
@@ -329,29 +336,42 @@ public class HomeActivity extends Activity {
         });
     }
 
-    /** Back to live TV with focus on the first app, then refreshes the apps and every row. */
+    /**
+     * Refreshes the rows. Back from another app (Home was hidden): also the apps, and live TV with
+     * focus on the first app. Back from a panel drawn over Home (quick settings, a dialog) or from
+     * the Home key, Home stayed visible and stays as it was.
+     */
     @Override
     protected void onResume() {
         super.onResume();
         resumed = true;
         HomeRedirectService.cancelPlexPlay();
         tick.run();
-        loadApps();
         loadRows(true);
-        View first = firstCard();
         // Apps rewrite their rows a few seconds after they close (YouTube does): show the new copy.
         getContentResolver().registerContentObserver(TvContract.PreviewPrograms.CONTENT_URI, true, tvRowsChanged);
         getContentResolver().registerContentObserver(TvContract.WatchNextPrograms.CONTENT_URI, true, tvRowsChanged);
         getContentResolver().registerContentObserver(TvContract.Programs.CONTENT_URI, true, guideChanged);
-        if (!showingApps) {
-            showLive();
-            if (first != null) {
-                first.requestFocus();
+        if (hidden) {
+            hidden = false;
+            loadApps();
+            View first = firstCard();
+            if (!showingApps) {
+                // The Home key already did this in onNewIntent.
+                if (!liveOn) {
+                    showLive();
+                }
+                if (first != null) {
+                    first.requestFocus();
+                }
             }
         }
     }
 
-    /** Saves a tile move in progress, frees the tuner and stops the clock while another app is on screen. */
+    /**
+     * Saves a tile move in progress and stops the clock. The tuner keeps playing: the Home key pauses
+     * Home only for the moment Google TV's home takes to send it back, and quick settings draw over it.
+     */
     @Override
     protected void onPause() {
         if (movingTile != null) {
@@ -364,29 +384,55 @@ public class HomeActivity extends Activity {
         getContentResolver().unregisterContentObserver(tvRowsChanged);
         getContentResolver().unregisterContentObserver(guideChanged);
         handler.removeCallbacks(reloadGuide);
+        super.onPause();
+    }
+
+    /** Another app covers Home: frees the tuner for Live TV and other apps. */
+    @Override
+    protected void onStop() {
+        releaseTuner();
+        hidden = true;
+        super.onStop();
+    }
+
+    /**
+     * Stops live TV in the hero and gives the tuner back. Opening Live TV calls it first, so Live TV
+     * never waits for Home to be hidden to get the tuner.
+     */
+    private void releaseTuner() {
         if (tuned) {
-            // Live TV and other apps need the tuner.
             live.stop();
             tuned = false;
         }
         liveOn = false;
-        super.onPause();
     }
 
     /**
-     * Home pressed while Home is already showing: back to the Home tab, live TV, rows at the top.
+     * Home pressed while Home is already showing: back to the top (see backToTop).
      *
      * @param intent the HOME intent
      */
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        showApps(false);
+        backToTop();
+    }
+
+    /**
+     * Back to the Home tab with focus on the first app and the rows at the top. Live TV keeps playing
+     * when the hero already shows it, so it is not tuned again.
+     */
+    private void backToTop() {
+        if (showingApps) {
+            showApps(false);
+        }
         rowsScroll.scrollTo(0, 0);
-        showLive();
         View first = firstCard();
         if (first != null) {
             first.requestFocus();
+        }
+        if (!liveOn) {
+            showLive();
         }
     }
 
@@ -602,7 +648,7 @@ public class HomeActivity extends Activity {
 
     /**
      * Shows live TV in the hero, or covers it with the artwork layer. The tuner starts on first use
-     * and keeps playing, with its sound, while the layer covers it; onPause releases it.
+     * and keeps playing, with its sound, while the layer covers it; releaseTuner frees it.
      *
      * @param on whether live TV shows
      */
@@ -652,6 +698,7 @@ public class HomeActivity extends Activity {
      */
     private void openLiveTv() {
         long id = live != null ? live.channelId() : -1;
+        releaseTuner();
         if (id >= 0) {
             try {
                 startActivity(new Intent(Intent.ACTION_VIEW, TvContract.buildChannelUri(id)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
@@ -748,7 +795,7 @@ public class HomeActivity extends Activity {
     }
 
     /**
-     * CH+ and CH- change the live channel while live TV shows; Back does nothing on Home.
+     * CH+ and CH- change the live channel while live TV shows; Back goes back to the top of Home.
      *
      * @param keyCode the key pressed
      * @param event the key event
@@ -762,6 +809,7 @@ public class HomeActivity extends Activity {
             return true;
         }
         if (keyCode == KeyEvent.KEYCODE_BACK) {
+            backToTop();
             return true;
         }
         return super.onKeyDown(keyCode, event);
@@ -827,6 +875,35 @@ public class HomeActivity extends Activity {
     private boolean inFirstGridLine(View v) {
         View first = firstGridTile();
         return v != null && first != null && v.getParent() == first.getParent();
+    }
+
+    /**
+     * Scrolls the Apps grid so a focused tile's whole line shows with room for its lift: the first line
+     * at the very top, a section's first line with the section title above it, and the last line down
+     * to the end of the grid, so one Down shows the bottom. Runs after the scroller's own scroll, which
+     * only brings the tile itself into view.
+     *
+     * @param v the focused tile
+     */
+    private void settleGrid(View v) {
+        v.post(() -> {
+            if (inFirstGridLine(v)) {
+                appsPane.smoothScrollTo(0, 0);
+                return;
+            }
+            View line = (View) v.getParent();
+            int at = appsGrid.indexOfChild(line);
+            View above = appsGrid.getChildAt(at - 1);
+            int top = above instanceof TextView ? above.getTop() : line.getTop() - px(16);
+            int bottom = at == appsGrid.getChildCount() - 1 ? appsGrid.getHeight() : line.getBottom() + px(16);
+            int view = appsPane.getHeight() - appsPane.getPaddingTop() - appsPane.getPaddingBottom();
+            int y = appsPane.getScrollY();
+            if (bottom > y + view) {
+                appsPane.smoothScrollTo(0, bottom - view);
+            } else if (top < y) {
+                appsPane.smoothScrollTo(0, top);
+            }
+        });
     }
 
     /**
@@ -1496,13 +1573,13 @@ public class HomeActivity extends Activity {
                 lastCard = v;
                 settleRows(v);
             }
-            if (has && v.getParent() == appRow) {
-                // Back from the content rows: live TV again.
+            if (has && v.getParent() == appRow && !liveOn) {
+                // Back from the content rows: live TV again. Moving along the apps while it already
+                // shows leaves the hero alone, or its text would blank and fade in again.
                 showLive();
             }
-            if (has && inFirstGridLine(v)) {
-                // The scroller only brings the tile itself into view; show the grid's top gap too.
-                appsPane.smoothScrollTo(0, 0);
+            if (has && isInside(v, appsGrid)) {
+                settleGrid(v);
             }
         });
         return cell;
@@ -1687,9 +1764,10 @@ public class HomeActivity extends Activity {
     // ---- Top bar --------------------------------------------------------------------------------
 
     /**
-     * The top bar from the design: profile, a pill with Search, Home and Apps (the tabs switch as soon
-     * as they are focused; Search opens on OK), a pill with ambient mode
-     * and Settings, and the clock with the weather under it on the right.
+     * The top bar from the design: profile, a pill with the Home and Apps tabs (they switch as soon as
+     * they are focused, and one highlight slides between them), a pill with Search and Settings (both
+     * open on OK), and the clock with the weather under it on the right. Left and Right stop at the
+     * bar's ends instead of jumping into the rows.
      *
      * @return the bar
      */
@@ -1700,11 +1778,22 @@ public class HomeActivity extends Activity {
         bar.setClipChildren(false);
         bar.addView(avatar(), new LinearLayout.LayoutParams(px(80), px(80)));
 
-        LinearLayout nav = pill();
-        nav.addView(pillButton(null, Icon.SEARCH, getString(R.string.tip_search), false,
-            v -> start(new Intent("android.search.action.GLOBAL_SEARCH"))));
-        homeTab = pillButton(getString(R.string.tab_home), -1, null, false, v -> showApps(false));
-        appsTab = pillButton(getString(R.string.tab_apps), -1, null, false, v -> showApps(true));
+        // The tabs sit on the sliding highlight, inside the pill.
+        FrameLayout nav = new FrameLayout(this);
+        nav.setPadding(px(8), px(8), px(8), px(8));
+        nav.setBackground(pillBackground());
+        tabHighlight = new View(this);
+        tabHighlightBg = new GradientDrawable();
+        tabHighlightBg.setCornerRadius(px(40));
+        tabHighlight.setBackground(tabHighlightBg);
+        nav.addView(tabHighlight, new FrameLayout.LayoutParams(0, px(80)));
+        LinearLayout tabs = new LinearLayout(this);
+        tabs.setGravity(Gravity.CENTER_VERTICAL);
+        nav.addView(tabs);
+        homeTab = pillButton(getString(R.string.tab_home), -1, null, v -> showApps(false));
+        homeTab.setId(View.generateViewId());
+        homeTab.setNextFocusLeftId(homeTab.getId());
+        appsTab = pillButton(getString(R.string.tab_apps), -1, null, v -> showApps(true));
         // Like Google TV, focusing a tab switches to it; OK is not needed.
         homeTab.setOnFocusChangeListener((v, has) -> {
             if (has && showingApps) {
@@ -1716,19 +1805,23 @@ public class HomeActivity extends Activity {
                 showApps(true);
             }
         });
-        nav.addView(homeTab);
-        nav.addView(appsTab);
+        tabs.addView(homeTab);
+        tabs.addView(appsTab);
+        pillPainters.add(this::placeTabHighlight);
         LinearLayout.LayoutParams navLp = new LinearLayout.LayoutParams(-2, -2);
         navLp.leftMargin = px(28);
         bar.addView(nav, navLp);
 
         LinearLayout tools = pill();
-        tools.addView(pillButton(null, Icon.PICTURE, getString(R.string.tip_screensaver), true,
-            v -> start(new Intent().setClassName("com.android.systemui", "com.android.systemui.Somnambulator"))));
+        tools.addView(pillButton(null, Icon.SEARCH, getString(R.string.tip_search),
+            v -> start(new Intent("android.search.action.GLOBAL_SEARCH"))));
         LinearLayout.LayoutParams gearLp = new LinearLayout.LayoutParams(-2, px(80));
         gearLp.leftMargin = px(8);
-        tools.addView(pillButton(null, Icon.GEAR, getString(R.string.tip_settings), true,
-            v -> start(new Intent(android.provider.Settings.ACTION_SETTINGS))), gearLp);
+        View gear = pillButton(null, Icon.GEAR, getString(R.string.tip_settings),
+            v -> start(new Intent(android.provider.Settings.ACTION_SETTINGS)));
+        gear.setId(View.generateViewId());
+        gear.setNextFocusRightId(gear.getId());
+        tools.addView(gear, gearLp);
         LinearLayout.LayoutParams toolsLp = new LinearLayout.LayoutParams(-2, -2);
         toolsLp.leftMargin = px(28);
         bar.addView(tools, toolsLp);
@@ -1841,26 +1934,81 @@ public class HomeActivity extends Activity {
         LinearLayout pill = new LinearLayout(this);
         pill.setGravity(Gravity.CENTER_VERTICAL);
         pill.setPadding(px(8), px(8), px(8), px(8));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.argb(235, 0x28, 0x2A, 0x2C));
-        bg.setCornerRadius(px(48));
-        pill.setBackground(bg);
+        pill.setBackground(pillBackground());
         return pill;
     }
 
     /**
-     * One button inside a pill: a label (Home, Apps) or an icon (Search, ambient mode, Settings).
-     * Colors follow Google TV's own top bar (see paintPillButton); an icon button shows its name
-     * under it while focused.
+     * @return the dark rounded fill of a top-bar pill
+     */
+    private GradientDrawable pillBackground() {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.argb(235, 0x28, 0x2A, 0x2C));
+        bg.setCornerRadius(px(48));
+        return bg;
+    }
+
+    /**
+     * Slides the tab highlight under the focused tab (pale), or under the tab on screen while focus is
+     * elsewhere (grey), animating its place, width and color from where it is now. Waits for the first
+     * layout, when the tabs have no width yet.
+     */
+    private void placeTabHighlight() {
+        View focus = getCurrentFocus();
+        boolean inTabs = focus == homeTab || focus == appsTab;
+        View target = inTabs ? focus : showingApps ? appsTab : homeTab;
+        if (target.getWidth() == 0) {
+            target.post(this::placeTabHighlight);
+            return;
+        }
+        float toX = target.getLeft();
+        int toWidth = target.getWidth();
+        int toColor = inTabs ? Color.rgb(0xCF, 0xDF, 0xED) : Color.rgb(0x37, 0x3E, 0x42);
+        ViewGroup.LayoutParams lp = tabHighlight.getLayoutParams();
+        if (lp.width == 0) {
+            // First placement: nothing to slide from.
+            tabHighlight.setTranslationX(toX);
+            lp.width = toWidth;
+            tabHighlight.setLayoutParams(lp);
+            tabHighlightBg.setColor(toColor);
+            tabHighlightColor = toColor;
+            return;
+        }
+        if (tabHighlight.getTranslationX() == toX && lp.width == toWidth && tabHighlightColor == toColor) {
+            return;
+        }
+        if (tabHighlightAnim != null) {
+            tabHighlightAnim.cancel();
+        }
+        float fromX = tabHighlight.getTranslationX();
+        int fromWidth = lp.width;
+        int fromColor = tabHighlightColor;
+        ArgbEvaluator argb = new ArgbEvaluator();
+        tabHighlightAnim = ValueAnimator.ofFloat(0f, 1f).setDuration(220);
+        tabHighlightAnim.setInterpolator(new DecelerateInterpolator());
+        tabHighlightAnim.addUpdateListener(a -> {
+            float f = a.getAnimatedFraction();
+            tabHighlight.setTranslationX(fromX + (toX - fromX) * f);
+            lp.width = Math.round(fromWidth + (toWidth - fromWidth) * f);
+            tabHighlight.setLayoutParams(lp);
+            tabHighlightColor = (int) argb.evaluate(f, fromColor, toColor);
+            tabHighlightBg.setColor(tabHighlightColor);
+        });
+        tabHighlightAnim.start();
+    }
+
+    /**
+     * One button inside a pill: a label (Home, Apps) or an icon (Search, Settings). Colors follow
+     * Google TV's own top bar (see paintPillButton); an icon button shows its name under it while
+     * focused.
      *
      * @param label text, or null for an icon button
      * @param icon Icon kind when label is null
      * @param tip the name shown under an icon button while focused, or null
-     * @param circle whether the button keeps a faint circle when idle (Google TV's tool buttons)
      * @param onClick what OK does
      * @return the button
      */
-    private View pillButton(String label, int icon, String tip, boolean circle, View.OnClickListener onClick) {
+    private View pillButton(String label, int icon, String tip, View.OnClickListener onClick) {
         FrameLayout b = new FrameLayout(this);
         b.setFocusable(true);
         GradientDrawable bg = new GradientDrawable();
@@ -1876,36 +2024,33 @@ public class HomeActivity extends Activity {
         } else {
             b.addView(i, new FrameLayout.LayoutParams(px(34), px(34), Gravity.CENTER));
         }
-        b.setTag(R.id.tab_selected, false);
-        pillPainters.add(() -> paintPillButton(b, bg, t, i, circle));
+        pillPainters.add(() -> paintPillButton(b, bg, t, i));
         if (tip != null) {
             b.setOnFocusChangeListener((v, has) -> showTip(has ? v : null, tip));
         }
         b.setOnClickListener(onClick);
         b.setMinimumWidth(px(80));
         b.setLayoutParams(new LinearLayout.LayoutParams(-2, px(80)));
-        paintPillButton(b, bg, t, i, circle);
+        paintPillButton(b, bg, t, i);
         return b;
     }
 
     /**
-     * Colors a pill button the way Google TV's top bar does: a pale fill and dark content while
-     * focused (blue-grey for the tabs, near white for the round tool buttons), a grey fill for the tab
-     * on screen, a faint circle behind idle tool buttons, and dimmed text in a pill the focus is not
-     * in. Colors change with a short transition, starting from the colors shown now.
+     * Colors a pill button the way Google TV's top bar does: dark content while focused, a near white
+     * circle behind a focused tool button and a faint one behind an idle one, and dimmed text in a pill
+     * the focus is not in. The tabs have no fill of their own: the sliding highlight under them
+     * (placeTabHighlight) is blue-grey while a tab is focused and grey under the tab on screen. Colors
+     * change with a short transition, starting from the colors shown now.
      *
      * @param b the button
      * @param bg its background
-     * @param t its label, or null
-     * @param i its icon, or null
-     * @param circle whether it is a round tool button
+     * @param t its label (a tab), or null
+     * @param i its icon (a tool button), or null
      */
-    private void paintPillButton(View b, GradientDrawable bg, TextView t, Icon i, boolean circle) {
+    private void paintPillButton(View b, GradientDrawable bg, TextView t, Icon i) {
         boolean focused = b.isFocused();
-        boolean selected = Boolean.TRUE.equals(b.getTag(R.id.tab_selected));
         boolean groupFocused = isInside(getCurrentFocus(), (View) b.getParent());
-        int toBg = focused ? (circle ? Color.rgb(0xE4, 0xF3, 0xFF) : Color.rgb(0xCF, 0xDF, 0xED))
-            : selected ? Color.rgb(0x37, 0x3E, 0x42) : circle ? Color.rgb(0x31, 0x32, 0x34) : Color.TRANSPARENT;
+        int toBg = t != null ? Color.TRANSPARENT : focused ? Color.rgb(0xE4, 0xF3, 0xFF) : Color.rgb(0x31, 0x32, 0x34);
         int toFg = focused ? Color.rgb(0x0E, 0x0E, 0x0F) : groupFocused || b.getParent() == null ? TEXT
             : Color.rgb(0xAD, 0xB0, 0xB3);
         // {shown bg, shown fg, target bg, target fg}: a transition starts from what is on screen, also
@@ -1980,8 +2125,6 @@ public class HomeActivity extends Activity {
 
     /** Gives the Home or Apps button the selected highlight. */
     private void markTabs() {
-        homeTab.setTag(R.id.tab_selected, !showingApps);
-        appsTab.setTag(R.id.tab_selected, showingApps);
         for (Runnable paint : pillPainters) {
             paint.run();
         }
