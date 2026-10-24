@@ -35,6 +35,8 @@ final class TvRows {
         /** When it was last watched, or 0. */
         long watchedAtMs;
         long sortKey;
+        /** Colour of the dot before the detail line of a smart device card, or 0 for no dot. */
+        int accent;
 
         /**
          * @return the fraction watched, or -1 when nothing was watched yet

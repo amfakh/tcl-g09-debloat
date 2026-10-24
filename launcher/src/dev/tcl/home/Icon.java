@@ -10,7 +10,7 @@ import android.view.View;
 /**
  * Line icons for the top bar, drawn in code so the launcher needs no image files: search, picture
  * (ambient mode), gear (settings), a 3x3 grid (All apps), a house (Google TV's home), chevrons for moving a tile and, under the
- * clock, the sky and a raindrop for the chance of rain.
+ * clock, the sky and a raindrop for the chance of rain, and the wind of an air purifier.
  * Drawn on a 24x24 grid, scaled to the view.
  */
 final class Icon extends View {
@@ -29,6 +29,7 @@ final class Icon extends View {
     static final int CHEVRON_LEFT = 13;
     static final int CHEVRON_RIGHT = 14;
     static final int HOME = 15;
+    static final int WIND = 16;
 
     private int kind;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -120,6 +121,10 @@ final class Icon extends View {
                     canvas.drawRoundRect(new RectF(x, y, x + 4, y + 4), 1, 1, paint);
                 }
             }
+        } else if (kind == WIND) {
+            hook(canvas, 8, 11, 2, true);
+            hook(canvas, 12, 19, 2.5f, true);
+            hook(canvas, 16, 14, 2, false);
         } else if (kind == HOME) {
             Path house = new Path();
             house.moveTo(3.5f, 11);
@@ -168,6 +173,13 @@ final class Icon extends View {
      * @param r disc radius
      * @param rays outer end of the rays
      */
+    /** A line from the left edge to xEnd at height y that curls over (or under) itself at the end, like a gust of wind. */
+    private void hook(Canvas canvas, float y, float xEnd, float r, boolean up) {
+        canvas.drawLine(2, y, xEnd, y, paint);
+        float cy = up ? y - r : y + r;
+        canvas.drawArc(new RectF(xEnd - r, cy - r, xEnd + r, cy + r), up ? 90 : -90, up ? -270 : 270, false, paint);
+    }
+
     private void sun(Canvas canvas, float cx, float cy, float r, float rays) {
         canvas.drawCircle(cx, cy, r, paint);
         for (int i = 0; i < 8; i++) {

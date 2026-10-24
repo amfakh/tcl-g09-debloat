@@ -33,6 +33,7 @@ diambil dari build dengan `show_live_tv` bernilai `false`. Foto profil di screen
 - [Persiapan](#persiapan)
 - [Debloat](#debloat)
 - [TCL Home](#tcl-home)
+- [Devices](#devices)
 - [Menutup ADB](#menutup-adb)
 
 ## TV ini
@@ -59,6 +60,8 @@ tools/build-install.sh  build TCL Home, install, jadikan Home, cek di layar
 tools/tvprobe.sh        cek data Continue watching, channel, dan siaran antena yang bisa dibaca launcher
 tools/tvprobe/          source APK probe untuk tvprobe.sh
 tools/plex-check.py     cek apa yang bisa diambil launcher dari server Plex (token di plex.local)
+tools/smart-home.sh     kirim daftar device Tuya dan kode AC ke TV (key tidak masuk repo atau APK)
+tools/ir-learn.py       ajari hub IR remote AC, satu state per kode (jalan di Mac)
 launcher/               source TCL Home; launcher/res/values/config.xml untuk semua setelan
 docs/screenshots/       gambar untuk README ini
 plex.local              token Plex, satu baris (jangan dibagikan)
@@ -583,6 +586,99 @@ terproteksi). Tombol yang dikirim lewat ADB tidak membuktikan perilaku remote fi
   jumlah baris per aplikasi, nama channel, bentuk link dan URI gambar (id dan angka disamarkan), rentang
   `_id` program, dan hash judul per aplikasi, bukan judul tontonan. `tools/tvprobe.sh live` menguji
   siaran antena di `TvView` selama 12 detik.
+
+## Devices
+
+Tab ketiga di pill atas (setelah Apps) menampilkan perangkat smart home dan mengontrolnya langsung dari
+TV. Device-nya BARDI, yang ternyata app OEM Tuya (SDK `com.thingclips` di APK-nya), jadi launcher
+bicara protokol Tuya lokal lewat Wi-Fi rumah (TCP 6668), tanpa cloud dan tanpa Google Home. Koneksi
+BARDI ke Google Home terbatas; lewat jalur ini semua yang bisa diatur device-nya bisa dikontrol.
+
+| Device | Protokol | Kartu |
+|---|---|---|
+| Air purifier (KJ236) | 3.5 | OK menyala/mati. Status: PM2.5 dan sisa filter |
+| Water fountain (BARDI Lite) | 3.3 | OK menyala/mati. Status: On, Off, atau On dengan UV |
+| AC, lewat hub Smart IR | 3.3 (hub) | Satu kartu per state yang diajarkan ke hub |
+
+TV yang disambungkan lewat IR tidak dimasukkan: TV ini sendiri yang menjalankan launcher.
+
+### Setup sekali
+
+Dikerjakan di Mac, di luar repo (folder `~/tuya`), karena `devices.json` dan `tinytuya.json` berisi
+local key dan Access Secret.
+
+1. **Pindahkan device ke Smart Life** (`com.tuya.smartlife`). Hapus dulu dari app BARDI, reset ke mode
+   pairing (LED berkedip cepat), lalu tambahkan di Smart Life. Hub IR terakhir. Akun OEM seperti BARDI
+   tidak bisa di-link ke project Tuya IoT, akun Smart Life atau Tuya Smart bisa.
+2. **Project di iot.tuya.com**: Cloud → Create Cloud Project, data center sesuai region akun Smart Life
+   (Singapore untuk Indonesia). Di tab Devices pilih Link App Account, scan QR dari Smart Life, lalu
+   catat Access ID dan Access Secret di Project Overview.
+3. **Ambil id, IP, versi protokol, dan local key**:
+
+   ```bash
+   uv tool install tinytuya
+   mkdir -p ~/tuya && cd ~/tuya && tinytuya wizard
+   ```
+
+   Hasilnya `devices.json`. Jangan tempel local key ke chat atau commit.
+4. **Kirim daftar ke TV**: `tools/smart-home.sh` (default membaca `~/tuya/devices.json`). Script ini
+   menulis `smart_home.json` ke `/sdcard/Android/data/dev.tcl.home/files/` lewat ADB. Isinya id, IP,
+   local key, dan versi protokol purifier, fountain, dan hub IR, jadi key tidak ada di repo atau APK.
+   Tanpa file itu tab Devices kosong dan menampilkan petunjuk ini.
+5. **Ajari AC** (bagian di bawah), lalu jalankan `tools/smart-home.sh` lagi.
+
+### AC lewat hub IR
+
+Remote AC mengirim seluruh tampilannya (mode, suhu, kipas) di setiap tekanan, jadi yang disimpan hub
+adalah satu state penuh, bukan satu tombol. State-nya didaftar di `STATES` di `tools/ir-learn.py`:
+`On`, `Off`, `Cool 22 high`, `Cool 22 auto`, `Dry`.
+
+```bash
+uv run --with tinytuya tools/ir-learn.py
+```
+
+Untuk tiap state, script minta remote diatur ke kondisinya, lalu menunggu 30 detik buat tekanan
+terakhir remote yang diarahkan ke hub. Tekanan terakhir itulah yang disimpan: tombol power untuk `On`
+dan `Off`, tombol suhu yang mendarat di angka yang diminta untuk yang lain. Arahkan remote menjauh dari
+hub saat mengatur, dan ke hub hanya untuk tekanan terakhir. Kode masuk ke `ac_codes.json` di sebelah
+`devices.json`, dengan urutan `STATES`.
+
+- State yang sudah ada dilewati, jadi script bisa dijalankan ulang dan hanya mengajari yang kurang.
+  Hapus labelnya dari `ac_codes.json` untuk mengajari ulang satu state.
+- Menambah atau mengganti state: ubah `STATES`, jalankan lagi. State yang tidak ada di `STATES`
+  dibuang dari file.
+- Urutan kartu di TV mengikuti urutan di file.
+
+### Batasan IR
+
+- **Preset, bukan kontrol.** Tidak ada tombol suhu naik/turun. Mau suhu atau kipas lain, ajari state
+  baru.
+- **Satu arah.** Hub tidak memberi tahu apakah AC menerima kodenya, dan AC tidak melaporkan statusnya.
+  Label "Last sent" hanya catatan launcher tentang kartu mana yang terakhir ditekan. Kalau AC diubah
+  dengan remote asli, label itu jadi salah.
+- **Garis pandang.** Hub harus bisa "melihat" AC.
+
+### Cara kerja
+
+`Tuya.java` bicara protokol 3.3 (AES-ECB), 3.4 (session key, HMAC), dan 3.5 (session key, AES-GCM).
+Setiap panggilan membuka koneksi, menjalankan satu pertukaran, lalu menutupnya, jadi kegagalan tidak
+meninggalkan sambungan setengah jalan. `SmartHome.java` membaca `smart_home.json` dan menanyakan
+state tiap device; device yang tidak menjawab tampil "Not reachable".
+
+Daftar dibaca ulang saat Home dibuka dan setelah tiap OK. Purifier melapor state barunya sesaat setelah
+patuh, jadi setelah menyalakan atau mematikan, launcher menunggu sampai device melapor state yang
+diminta (maksimal sekitar 3 detik) sebelum menampilkannya.
+
+IP diambil dari `devices.json`. Kalau DHCP memberi IP baru, kartunya jadi "Not reachable" sampai
+`tools/smart-home.sh` dijalankan lagi; lebih mudah kasih IP tetap di router.
+
+### Sudah dicek di TV (24 Oktober 2026)
+
+- Purifier (3.5): tiga kali OK berturut-turut menyala, mati, menyala, dan statusnya mengikuti.
+- Fountain (3.3): OK menyala/mati dan balik lagi.
+- AC: kelima kartu terkirim dan "Last sent" pindah ke kartu yang ditekan. Efek ke AC hanya dikonfirmasi
+  untuk `On` (AC menyala).
+- Protokol 3.4 belum diuji, tidak ada device 3.4.
 
 ## Menutup ADB
 
