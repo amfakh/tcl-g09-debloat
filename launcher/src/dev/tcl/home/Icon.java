@@ -30,6 +30,7 @@ final class Icon extends View {
     static final int CHEVRON_RIGHT = 14;
     static final int HOME = 15;
     static final int WIND = 16;
+    static final int SNOW = 17;
 
     private int kind;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -120,6 +121,17 @@ final class Icon extends View {
                     float y = 3.5f + 6.5f * row;
                     canvas.drawRoundRect(new RectF(x, y, x + 4, y + 4), 1, 1, paint);
                 }
+            }
+        } else if (kind == SNOW) {
+            for (int i = 0; i < 3; i++) {
+                canvas.save();
+                canvas.rotate(60 * i, 12, 12);
+                canvas.drawLine(12, 3, 12, 21, paint);
+                canvas.drawLine(9.5f, 5.5f, 12, 3, paint);
+                canvas.drawLine(14.5f, 5.5f, 12, 3, paint);
+                canvas.drawLine(9.5f, 18.5f, 12, 21, paint);
+                canvas.drawLine(14.5f, 18.5f, 12, 21, paint);
+                canvas.restore();
             }
         } else if (kind == WIND) {
             hook(canvas, 8, 11, 2, true);

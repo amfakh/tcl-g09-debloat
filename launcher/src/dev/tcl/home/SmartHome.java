@@ -60,6 +60,8 @@ final class SmartHome {
         String version;
         Tuya tuya;
         boolean on;
+        /** The data points of the last read, by number, for the options panel. */
+        JSONObject dps = new JSONObject();
     }
 
     /**
@@ -108,6 +110,7 @@ final class SmartHome {
                     item.action = "smart:" + (read.size() - 1);
                     try {
                         JSONObject dps = new JSONObject(queryResolving(d)).getJSONObject("dps");
+                        d.dps = dps;
                         d.on = dps.getBoolean("1");
                         item.description = d.on ? STATE_ON : STATE_OFF;
                         detail(d, dps, item);
@@ -118,7 +121,7 @@ final class SmartHome {
                     items.add(item);
                 }
                 if (acId != null) {
-                    items.addAll(acItems());
+                    items.add(acItem());
                 }
             } catch (IOException | JSONException e) {
                 items.clear();
@@ -163,11 +166,12 @@ final class SmartHome {
     }
 
     /**
-     * Changes one thing on the air conditioner through the cloud: power, temperature one degree up or down, the
-     * next mode or the next fan speed. An IR remote reports nothing back, so the new value is only remembered
-     * once the cloud has accepted it; a refusal is remembered too, so the card can say it was not sent.
+     * Changes one thing on the air conditioner through the cloud. An IR remote reports nothing back, so the new
+     * value is only remembered once the cloud has accepted it; a refusal is remembered too, so the card can say
+     * it was not sent.
      *
-     * @param what "power", "up", "down", "mode" or "fan", from the card's action ("ac:up")
+     * @param what "power" (the other one), "up" or "down" (one degree), "mode:N" or "fan:N" (the numbers Tuya
+     *     uses for an IR air conditioner)
      * @throws IOException when the cloud does not take the command
      */
     void sendAc(String what) throws IOException {
@@ -177,24 +181,18 @@ final class SmartHome {
         int fan = prefs.getInt("ac_fan", 0);
         try {
             JSONObject command = new JSONObject();
-            switch (what) {
-                case "power":
-                    power = !power;
-                    command.put("code", power ? "PowerOn" : "PowerOff").put("value", power ? "PowerOn" : "PowerOff");
-                    break;
-                case "up":
-                case "down":
-                    temp = Math.max(acMinTemp, Math.min(acMaxTemp, temp + (what.equals("up") ? 1 : -1)));
-                    command.put("code", "T").put("value", temp);
-                    break;
-                case "mode":
-                    mode = (mode + 1) % AC_MODES.length;
-                    command.put("code", "M").put("value", mode);
-                    break;
-                default:
-                    fan = (fan + 1) % AC_FANS.length;
-                    command.put("code", "F").put("value", fan);
-                    break;
+            if (what.equals("power")) {
+                power = !power;
+                command.put("code", power ? "PowerOn" : "PowerOff").put("value", power ? "PowerOn" : "PowerOff");
+            } else if (what.equals("up") || what.equals("down")) {
+                temp = Math.max(acMinTemp, Math.min(acMaxTemp, temp + (what.equals("up") ? 1 : -1)));
+                command.put("code", "T").put("value", temp);
+            } else if (what.startsWith("mode:")) {
+                mode = Integer.parseInt(what.substring("mode:".length()));
+                command.put("code", "M").put("value", mode);
+            } else {
+                fan = Integer.parseInt(what.substring("fan:".length()));
+                command.put("code", "F").put("value", fan);
             }
             cloud.sendCommands(acId, new JSONArray().put(command));
         } catch (JSONException e) {
@@ -207,26 +205,75 @@ final class SmartHome {
             .putBoolean("ac_failed", false).apply();
     }
 
-    /** The cards of the air conditioner, from what was last sent to it. */
-    private List<TvRows.Item> acItems() {
-        boolean failed = prefs.getBoolean("ac_failed", false);
-        String[][] cards = {
-            {"power", "Power", failed ? "Not sent" : prefs.getBoolean("ac_power", false) ? "On" : "Off"},
-            {"down", "", "−"},
-            {"temp", "Temperature", prefs.getInt("ac_temp", 24) + "°C"},
-            {"up", "", "+"},
-            {"mode", "Mode", AC_MODES[prefs.getInt("ac_mode", 0)]},
-            {"fan", "Fan", AC_FANS[prefs.getInt("ac_fan", 0)]},
-        };
-        List<TvRows.Item> items = new ArrayList<>();
-        for (String[] card : cards) {
-            TvRows.Item item = new TvRows.Item();
-            item.action = "ac:" + card[0];
-            item.title = card[1];
-            item.description = card[2];
-            items.add(item);
+    /**
+     * Sets one data point of a local device, such as the purifier's mode. A value that stays (a mode, a lock) is
+     * waited for until the device reports it; a trigger such as a filter reset is not.
+     *
+     * @param index the device, as numbered in its card's action ("smart:2")
+     * @param dp the data point number
+     * @param value a Boolean or a String
+     * @throws IOException when the device does not answer
+     */
+    void setLocal(int index, String dp, Object value) throws IOException {
+        Device d = devices.get(index);
+        String json = value instanceof String ? "\"" + value + "\"" : String.valueOf(value);
+        d.tuya.control("{\"" + dp + "\":" + json + "}");
+        if (Boolean.TRUE.equals(value) && !dp.equals("7") && !dp.equals("1")) {
+            return;
         }
-        return items;
+        for (int i = 0; i < REPORT_TRIES; i++) {
+            try {
+                if (String.valueOf(value).equals(new JSONObject(d.tuya.query()).getJSONObject("dps").opt(dp).toString())) {
+                    return;
+                }
+                Thread.sleep(REPORT_WAIT_MS);
+            } catch (JSONException | NullPointerException e) {
+                return;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    /**
+     * The values the options panel of a device shows: the data points of its last read plus its kind, or for the
+     * air conditioner what was last sent to it and its temperature limits.
+     *
+     * @param action the card's action: "smart:2" or "ac:power"
+     * @return the values
+     */
+    JSONObject values(String action) {
+        JSONObject v = new JSONObject();
+        try {
+            if (action.startsWith("ac:")) {
+                return v.put("_kind", "ac").put("power", prefs.getBoolean("ac_power", false))
+                    .put("temp", prefs.getInt("ac_temp", 24)).put("mode", prefs.getInt("ac_mode", 0))
+                    .put("fan", prefs.getInt("ac_fan", 0)).put("min", acMinTemp).put("max", acMaxTemp);
+            }
+            Device d = devices.get(Integer.parseInt(action.split(":")[1]));
+            return new JSONObject(d.dps.toString()).put("_kind", d.kind);
+        } catch (JSONException e) {
+            return v;
+        }
+    }
+
+    /** The air conditioner's card, from what was last sent to it: an IR remote reports nothing back. */
+    private TvRows.Item acItem() {
+        TvRows.Item item = new TvRows.Item();
+        item.title = "Air conditioner";
+        item.packageName = "ac";
+        item.action = "ac:power";
+        if (prefs.getBoolean("ac_failed", false)) {
+            item.description = STATE_OFFLINE;
+        } else if (prefs.getBoolean("ac_power", false)) {
+            item.description = STATE_ON;
+            item.episode = AC_MODES[prefs.getInt("ac_mode", 0)] + "  ·  " + prefs.getInt("ac_temp", 24) + "°C  ·  Fan "
+                + AC_FANS[prefs.getInt("ac_fan", 0)];
+        } else {
+            item.description = STATE_OFF;
+        }
+        return item;
     }
 
     /** Asks the device for its state; when it does not answer where it was, looks for it on the network once. */

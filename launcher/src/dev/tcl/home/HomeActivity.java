@@ -158,8 +158,7 @@ public class HomeActivity extends Activity {
     private View devicesTab;
     private LinearLayout devicesPane;
     private LinearLayout devicesRow;
-    private LinearLayout acRow;
-    private TextView acTitle;
+    private DeviceOptions options;
     private TextView devicesEmpty;
     private static final int TAB_HOME = 0;
     private static final int TAB_APPS = 1;
@@ -260,6 +259,7 @@ public class HomeActivity extends Activity {
         weather = new Weather(this);
         plex = new Plex(this);
         smartHome = new SmartHome(this);
+        options = new DeviceOptions(this, smartHome);
         youtubeRows = getResources().getStringArray(R.array.youtube_rows);
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(BG);
@@ -367,15 +367,6 @@ public class HomeActivity extends Activity {
         devicesRow = new LinearLayout(this);
         devicesRow.setClipChildren(false);
         devicesPane.addView(devicesRow);
-        acTitle = text(24, Color.WHITE, true);
-        acTitle.setText(R.string.devices_ac);
-        LinearLayout.LayoutParams acTitleLp = new LinearLayout.LayoutParams(-2, -2);
-        acTitleLp.topMargin = px(40);
-        acTitleLp.bottomMargin = px(16);
-        devicesPane.addView(acTitle, acTitleLp);
-        acRow = new LinearLayout(this);
-        acRow.setClipChildren(false);
-        devicesPane.addView(acRow);
         devicesEmpty = text(24, Color.argb(180, 255, 255, 255), false);
         devicesEmpty.setText(R.string.devices_empty);
         devicesPane.addView(devicesEmpty);
@@ -898,12 +889,12 @@ public class HomeActivity extends Activity {
             return true;
         } else if (event.getAction() == KeyEvent.ACTION_DOWN && tab == TAB_DEVICES
                 && event.getKeyCode() == KeyEvent.KEYCODE_DPAD_DOWN && isInside(getCurrentFocus(), topBarView)
-                && devicesRow.getChildCount() + acRow.getChildCount() > 0) {
-            (devicesRow.getChildCount() > 0 ? devicesRow : acRow).getChildAt(0).requestFocus();
+                && devicesRow.getChildCount() > 0) {
+            devicesRow.getChildAt(0).requestFocus();
             return true;
         } else if (event.getAction() == KeyEvent.ACTION_DOWN && tab == TAB_DEVICES
                 && event.getKeyCode() == KeyEvent.KEYCODE_DPAD_UP
-                && (isInside(getCurrentFocus(), devicesRow) || devicesRow.getChildCount() == 0 && isInside(getCurrentFocus(), acRow))) {
+                && isInside(getCurrentFocus(), devicesRow)) {
             devicesTab.requestFocus();
             return true;
         }
@@ -1213,15 +1204,9 @@ public class HomeActivity extends Activity {
      * card that has focus would hand focus to the Home tab, which switches tabs.
      */
     private void showDevices() {
-        List<TvRows.Item> devices = new ArrayList<>();
-        List<TvRows.Item> ac = new ArrayList<>();
-        for (TvRows.Item item : smartItems) {
-            (item.action.startsWith("ac:") ? ac : devices).add(item);
-        }
-        fillDevices(devicesRow, devices);
-        fillDevices(acRow, ac);
-        acTitle.setVisibility(ac.isEmpty() ? View.GONE : View.VISIBLE);
+        fillDevices(devicesRow, smartItems);
         devicesEmpty.setVisibility(smartItems.isEmpty() ? View.VISIBLE : View.GONE);
+        options.refresh();
     }
 
     /**
@@ -1229,7 +1214,7 @@ public class HomeActivity extends Activity {
      * row is built again.
      *
      * @param row the row
-     * @param items its devices, or the AC's controls
+     * @param items its devices
      */
     private void fillDevices(LinearLayout row, List<TvRows.Item> items) {
         if (row.getChildCount() == items.size()) {
@@ -1242,56 +1227,8 @@ public class HomeActivity extends Activity {
         }
         row.removeAllViews();
         for (TvRows.Item item : items) {
-            row.addView(row == acRow ? acCard(item) : deviceCard(item));
+            row.addView(deviceCard(item));
         }
-    }
-
-    /**
-     * A card of the air conditioner: a small label on top and the value big at the bottom (power, temperature,
-     * mode, fan). The temperature card only shows; the minus and plus cards are narrow squares with just a sign.
-     *
-     * @param item the card's item; its action is "ac:" and what the card does
-     * @return the card
-     */
-    private View acCard(TvRows.Item item) {
-        String kind = item.action.substring("ac:".length());
-        boolean step = kind.equals("up") || kind.equals("down");
-        boolean display = kind.equals("temp");
-        FrameLayout card = new FrameLayout(this);
-        card.setFocusable(!display);
-        GradientDrawable ring = new GradientDrawable();
-        ring.setCornerRadius(px(16));
-        card.setForeground(ring);
-        GradientDrawable fill = new GradientDrawable();
-        fill.setColor(display ? Color.rgb(31, 33, 36) : Color.rgb(42, 44, 49));
-        fill.setCornerRadius(px(16));
-        card.setBackground(fill);
-        card.setClipToOutline(true);
-
-        TextView label = text(18, Color.argb(210, 255, 255, 255), false);
-        label.setText(item.title);
-        FrameLayout.LayoutParams labelLp = new FrameLayout.LayoutParams(-1, -2, Gravity.TOP);
-        labelLp.setMargins(px(16), px(14), px(16), 0);
-        card.addView(label, labelLp);
-        TextView value = text(step ? 56 : 34, Color.WHITE, true);
-        value.setText(item.description);
-        FrameLayout.LayoutParams valueLp = step ? new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER)
-            : new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
-        if (!step) {
-            valueLp.setMargins(px(16), 0, px(16), px(14));
-        }
-        card.addView(value, valueLp);
-        card.setTag((java.util.function.Consumer<TvRows.Item>) now -> value.setText(now.description));
-
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(px(step ? 150 : display ? 220 : 320), px(150));
-        lp.rightMargin = px(28);
-        card.setLayoutParams(lp);
-        card.setOnFocusChangeListener((v, has) -> {
-            v.animate().scaleX(has ? 1.06f : 1f).scaleY(has ? 1.06f : 1f).setDuration(150).start();
-            ring.setStroke(has ? px(4) : 0, TEXT);
-        });
-        card.setOnClickListener(v -> switchSmart(item));
-        return card;
     }
 
     /**
@@ -1317,7 +1254,7 @@ public class HomeActivity extends Activity {
         chipBg.setShape(GradientDrawable.OVAL);
         FrameLayout chip = new FrameLayout(this);
         chip.setBackground(chipBg);
-        Icon icon = new Icon(this, "purifier".equals(item.packageName) ? Icon.WIND : Icon.DROP);
+        Icon icon = new Icon(this, iconFor(item.packageName));
         chip.addView(icon, new FrameLayout.LayoutParams(px(30), px(30), Gravity.CENTER));
         FrameLayout.LayoutParams chipLp = new FrameLayout.LayoutParams(px(52), px(52), Gravity.TOP | Gravity.START);
         chipLp.setMargins(px(16), px(16), 0, 0);
@@ -1394,7 +1331,32 @@ public class HomeActivity extends Activity {
             ring.setStroke(has ? px(4) : 0, TEXT);
         });
         card.setOnClickListener(v -> switchSmart(item));
+        card.setOnLongClickListener(v -> {
+            options.show(item.action, item.title, iconFor(item.packageName), v);
+            return true;
+        });
         return card;
+    }
+
+    private static int iconFor(String kind) {
+        return "purifier".equals(kind) ? Icon.WIND : "ac".equals(kind) ? Icon.SNOW : Icon.DROP;
+    }
+
+    /**
+     * Runs a change to a smart device on the smart thread, then reads the devices again, so the cards and an open
+     * options sheet show what the device reports.
+     *
+     * @param send the change
+     */
+    void smart(DeviceOptions.Send send) {
+        smartHomeThread.execute(() -> {
+            try {
+                send.run();
+            } catch (IOException e) {
+                // The read below shows a device that does not answer as not reachable.
+            }
+            loadSmartHome();
+        });
     }
 
     /**
@@ -1405,17 +1367,12 @@ public class HomeActivity extends Activity {
      */
     private void switchSmart(TvRows.Item item) {
         String[] at = item.action.split(":");
-        smartHomeThread.execute(() -> {
-            try {
-                if (at[0].equals("ac")) {
-                    smartHome.sendAc(at[1]);
-                } else {
-                    smartHome.toggle(Integer.parseInt(at[1]));
-                }
-            } catch (IOException e) {
-                // The read below shows a device that does not answer as not reachable.
+        smart(() -> {
+            if (at[0].equals("ac")) {
+                smartHome.sendAc(at[1]);
+            } else {
+                smartHome.toggle(Integer.parseInt(at[1]));
             }
-            loadSmartHome();
         });
     }
 
@@ -2559,7 +2516,7 @@ public class HomeActivity extends Activity {
     /**
      * @return a vertical LinearLayout that lets focused children grow past it
      */
-    private LinearLayout column() {
+    LinearLayout column() {
         LinearLayout l = new LinearLayout(this);
         l.setOrientation(LinearLayout.VERTICAL);
         l.setClipChildren(false);
@@ -2572,7 +2529,7 @@ public class HomeActivity extends Activity {
      * @param bold whether to use the bold weight
      * @return a styled TextView
      */
-    private TextView text(float size, int color, boolean bold) {
+    TextView text(float size, int color, boolean bold) {
         TextView t = new TextView(this);
         t.setTextSize(TypedValue.COMPLEX_UNIT_PX, px(size));
         t.setTextColor(color);
@@ -2587,7 +2544,7 @@ public class HomeActivity extends Activity {
      * @param value size in 1080p design pixels
      * @return the size in real pixels
      */
-    private int px(float value) {
+    int px(float value) {
         return Math.round(value * getResources().getDisplayMetrics().widthPixels / 1920f);
     }
 }

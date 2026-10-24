@@ -600,7 +600,20 @@ mengendalikannya.
 |---|---|---|
 | Air purifier (KJ236, protokol 3.5) | Lokal | OK menyala/mati. Detail: PM2.5 dan sisa filter |
 | Water fountain (BARDI Lite, protokol 3.3) | Lokal | OK menyala/mati. Detail: UV dan sisa filter (hari) |
-| AC, lewat hub Smart IR | Cloud | Power, suhu − dan +, Mode (Cool, Heat, Auto, Fan, Dry), dan Fan (Auto, Low, Mid, High) |
+| AC, lewat hub Smart IR | Cloud | OK menyala/mati. Detail: mode, suhu, kipas yang terakhir dikirim |
+
+OK sekali di kartu menyalakan atau mematikan device. **Tahan OK** membuka menu opsinya di panel kanan
+(Back menutup):
+
+| Device | Isi menu |
+|---|---|
+| Air purifier | Mode (Silent, Auto, 1, 2), child lock, meter sisa filter dan reset filter |
+| Water fountain | Meter sisa filter (hari, dari 90) dan sisa clean (hari, dari 31), masing-masing dengan reset |
+| AC | Power, suhu − dan + (satu derajat, 16 sampai 30), Mode (Cool, Heat, Auto, Fan, Dry), Fan (Auto, Low, Mid, High) |
+
+Tombol reset butuh dua kali OK (teksnya berubah jadi "Press OK again to reset" dan batal sendiri setelah 4
+detik). Isi panel selalu dicat dari yang dilaporkan device setelah perubahan, bukan dari tombol yang
+ditekan; yang pengecualian adalah AC, yang tidak melaporkan apa-apa, jadi isinya yang terakhir dikirim.
 
 TV yang disambungkan lewat IR tidak dimasukkan: TV ini sendiri yang menjalankan launcher.
 
