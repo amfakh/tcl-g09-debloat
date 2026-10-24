@@ -365,7 +365,8 @@ langsung menggulir sampai bawah grid.
 keluar saat kembali ke siaran. Gambar hero berganti dengan crossfade (dua `ImageView` bergantian), dan
 teks hero fade sambil naik sedikit setiap item berganti. Gambar kartu yang baru selesai diunduh fade
 masuk; yang sudah ada di cache langsung tampil. Tab Home dan Apps berganti dengan crossfade. Kartu dan
-tile membesar saat difokus. Highlight tab bergeser antara Home dan Apps, dan warna pill di top bar
+tile membesar saat difokus. Saat favorit dipindah (Move), tile itu dan tetangganya bergeser ke tempat
+baru masing-masing (200 ms), juga kalau kiri/kanan ditekan cepat. Highlight tab bergeser antara Home dan Apps, dan warna pill di top bar
 berganti dengan transisi, juga saat fokus naik dari kartu ke top bar. Durasinya 200–320 ms, dikali skala animasi sistem (di TV ini sudah disetel ke 1;
 bawaannya 0,5).
 

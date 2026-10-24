@@ -31,6 +31,7 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
@@ -1751,8 +1752,8 @@ public class HomeActivity extends Activity {
     }
 
     /**
-     * Swaps the tile being moved with its neighbor. The neighbor moves rather than the tile, so the
-     * tile keeps focus.
+     * Swaps the tile being moved with its neighbor, and slides both from where they show now into
+     * their new places. The neighbor moves rather than the tile, so the tile keeps focus.
      *
      * @param step -1 for left, 1 for right
      */
@@ -1763,15 +1764,44 @@ public class HomeActivity extends Activity {
         if (j < 0 || j >= favorites().size()) {
             return;
         }
+        View tile = movingTile;
         View other = appRow.getChildAt(j);
+        // Where both show now, also halfway through the slide of a previous swap.
+        float tileX = tile.getLeft() + tile.getTranslationX();
+        float otherX = other.getLeft() + other.getTranslationX();
         appRow.removeView(other);
         appRow.addView(other, i);
+        appRow.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+            /**
+             * Starts both slides once the swap is laid out, before its first frame shows.
+             *
+             * @return true, so the frame draws
+             */
+            @Override
+            public boolean onPreDraw() {
+                appRow.getViewTreeObserver().removeOnPreDrawListener(this);
+                slideFrom(tile, tileX);
+                slideFrom(other, otherX);
+                return true;
+            }
+        });
         paintMoving(movingTile, true);
         movingTile.post(() -> {
             Rect r = new Rect();
             movingTile.getDrawingRect(r);
             movingTile.requestRectangleOnScreen(r);
         });
+    }
+
+    /**
+     * Shows a view where it was and slides it into its laid-out place.
+     *
+     * @param v a tile of the Your apps row
+     * @param fromX where its left edge showed, in the row
+     */
+    private void slideFrom(View v, float fromX) {
+        v.setTranslationX(fromX - v.getLeft());
+        v.animate().translationX(0f).setDuration(200).setInterpolator(new DecelerateInterpolator()).start();
     }
 
     /** Ends a move: saves the favorites in the row's new order. */
