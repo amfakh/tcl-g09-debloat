@@ -87,23 +87,6 @@ final class Tuya {
         }
     }
 
-    /**
-     * Sends a learned IR code through an IR hub. The hub does not answer a send, so this returns once the
-     * request is written.
-     *
-     * @param code the base64 code `tools/ir-learn.py` saved
-     * @throws IOException when the hub cannot be reached
-     */
-    void sendIr(String code) throws IOException {
-        String command = "{\"control\":\"send_ir\",\"type\":0,\"head\":\"\",\"key1\":\"1" + code + "\"}";
-        String dps = "{\"201\":\"" + command.replace("\\", "\\\\").replace("\"", "\\\"") + "\"}";
-        String body = "{\"devId\":\"" + id + "\",\"uid\":\"" + id + "\",\"t\":\""
-            + System.currentTimeMillis() / 1000 + "\",\"dps\":" + dps + "}";
-        try (Session s = new Session()) {
-            s.send(CONTROL, body.getBytes(StandardCharsets.UTF_8), true);
-        }
-    }
-
     /** One TCP connection to the device, with the session key once the protocol needs one. */
     private final class Session implements Closeable {
         private final Socket socket = new Socket();

@@ -1229,7 +1229,7 @@ public class HomeActivity extends Activity {
      * row is built again.
      *
      * @param row the row
-     * @param items its devices, or the AC's learned states
+     * @param items its devices, or the AC's controls
      */
     private void fillDevices(LinearLayout row, List<TvRows.Item> items) {
         if (row.getChildCount() == items.size()) {

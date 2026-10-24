@@ -60,8 +60,8 @@ tools/build-install.sh  build TCL Home, install, jadikan Home, cek di layar
 tools/tvprobe.sh        cek data Continue watching, channel, dan siaran antena yang bisa dibaca launcher
 tools/tvprobe/          source APK probe untuk tvprobe.sh
 tools/plex-check.py     cek apa yang bisa diambil launcher dari server Plex (token di plex.local)
-tools/smart-home.sh     kirim daftar device Tuya dan kode AC ke TV (key tidak masuk repo atau APK)
-tools/ir-learn.py       ajari hub IR remote AC, satu state per kode (jalan di Mac)
+tools/tuya-login.py     login Smart Life dengan QR, simpan sesi dan daftar device beserta local key
+tools/smart-home.sh     kirim daftar device Tuya dan sesi cloud ke TV (key tidak masuk repo atau APK)
 launcher/               source TCL Home; launcher/res/values/config.xml untuk semua setelan
 docs/screenshots/       gambar untuk README ini
 plex.local              token Plex, satu baris (jangan dibagikan)
@@ -590,80 +590,66 @@ terproteksi). Tombol yang dikirim lewat ADB tidak membuktikan perilaku remote fi
 ## Devices
 
 Tab ketiga di pill atas (setelah Apps) menampilkan perangkat smart home dan mengontrolnya langsung dari
-TV. Device-nya BARDI, yang ternyata app OEM Tuya (SDK `com.thingclips` di APK-nya), jadi launcher
-bicara protokol Tuya lokal lewat Wi-Fi rumah (TCP 6668), tanpa cloud dan tanpa Google Home. Koneksi
-BARDI ke Google Home terbatas; lewat jalur ini semua yang bisa diatur device-nya bisa dikontrol.
+TV. Device-nya BARDI, yang ternyata app OEM Tuya (SDK `com.thingclips` di APK-nya), jadi purifier dan
+fountain dikontrol lewat protokol Tuya lokal di Wi-Fi rumah (TCP 6668), tanpa cloud dan tanpa Google
+Home. Koneksi BARDI ke Google Home terbatas; lewat jalur ini semua yang bisa diatur device-nya bisa
+dikontrol. AC adalah remote IR virtual di Smart Life, jadi hanya cloud Tuya yang bisa
+mengendalikannya.
 
-| Device | Protokol | Kartu |
+| Device | Jalur | Kartu |
 |---|---|---|
-| Air purifier (KJ236) | 3.5 | OK menyala/mati. Status: PM2.5 dan sisa filter |
-| Water fountain (BARDI Lite) | 3.3 | OK menyala/mati. Status: On, Off, atau On dengan UV |
-| AC, lewat hub Smart IR | 3.3 (hub) | Satu kartu per state yang diajarkan ke hub |
+| Air purifier (KJ236, protokol 3.5) | Lokal | OK menyala/mati. Detail: PM2.5 dan sisa filter |
+| Water fountain (BARDI Lite, protokol 3.3) | Lokal | OK menyala/mati. Detail: UV dan sisa filter (hari) |
+| AC, lewat hub Smart IR | Cloud | Power, suhu − dan +, Mode (Cool, Heat, Auto, Fan, Dry), dan Fan (Auto, Low, Mid, High) |
 
 TV yang disambungkan lewat IR tidak dimasukkan: TV ini sendiri yang menjalankan launcher.
 
 ### Setup sekali
 
-Dikerjakan di Mac, di luar repo (folder `~/tuya`), karena `devices.json` dan `tinytuya.json` berisi
-local key dan Access Secret.
+Dikerjakan di Mac, di luar repo (folder `~/tuya`), karena `tuya-session.json` berisi local key dan token
+sesi, sama sensitifnya dengan password.
 
 1. **Pindahkan device ke Smart Life** (`com.tuya.smartlife`). Hapus dulu dari app BARDI, reset ke mode
-   pairing (LED berkedip cepat), lalu tambahkan di Smart Life. Hub IR terakhir. Akun OEM seperti BARDI
-   tidak bisa di-link ke project Tuya IoT, akun Smart Life atau Tuya Smart bisa.
-2. **Project di iot.tuya.com**: Cloud → Create Cloud Project, data center sesuai region akun Smart Life
-   (Singapore untuk Indonesia). Di tab Devices pilih Link App Account, scan QR dari Smart Life, lalu
-   catat Access ID dan Access Secret di Project Overview.
-3. **Ambil id, IP, versi protokol, dan local key**:
+   pairing (LED berkedip cepat), lalu tambahkan di Smart Life. Hub IR terakhir.
+2. **Login dan ambil device**:
 
    ```bash
-   uv tool install tinytuya
-   mkdir -p ~/tuya && cd ~/tuya && tinytuya wizard
+   uv run --with cryptography --with qrcode tools/tuya-login.py
    ```
 
-   Hasilnya `devices.json`. Jangan tempel local key ke chat atau commit.
-4. **Kirim daftar ke TV**: `tools/smart-home.sh` (default membaca `~/tuya/devices.json`). Script ini
-   menulis `smart_home.json` ke `/sdcard/Android/data/dev.tcl.home/files/` lewat ADB. Isinya id, IP,
-   local key, dan versi protokol purifier, fountain, dan hub IR, jadi key tidak ada di repo atau APK.
-   Tanpa file itu tab Devices kosong dan menampilkan petunjuk ini.
-5. **Ajari AC** (bagian di bawah), lalu jalankan `tools/smart-home.sh` lagi.
+   Masukkan User Code (Smart Life: Me, Settings, Account and Security, User Code), scan QR yang tampil
+   dari tombol scan di Smart Life, lalu konfirmasi. Hasilnya `~/tuya/tuya-session.json`: sesi cloud dan
+   semua device dengan id, local key, dan kategori. Ini alur login yang sama dengan integrasi Tuya di
+   Home Assistant, jadi script meminjam client id integrasi itu; pakai hanya untuk akun dan device
+   sendiri, dan jangan dipublikasikan.
+3. **IP dan versi protokol** purifier dan fountain diambil dari `devices.json` di folder yang sama
+   (hasil `tinytuya wizard`) sampai discovery otomatis ada. Kasih IP tetap di router.
+4. **Kirim ke TV**: `tools/smart-home.sh` menulis `smart_home.json` ke
+   `/sdcard/Android/data/dev.tcl.home/files/` lewat ADB: id, IP, local key, versi protokol, dan sesi
+   cloud. Key tidak ada di repo atau APK. Tanpa file itu tab Devices kosong dan menampilkan petunjuk.
 
-### AC lewat hub IR
+### AC lewat cloud
 
-Remote AC mengirim seluruh tampilannya (mode, suhu, kipas) di setiap tekanan, jadi yang disimpan hub
-adalah satu state penuh, bukan satu tombol. State-nya didaftar di `STATES` di `tools/ir-learn.py`:
-`On`, `Off`, `Cool 22 high`, `Cool 22 auto`, `Dry`.
+Cloud Tuya menerima empat perintah untuk AC IR: `PowerOn`/`PowerOff`, `T` (suhu 16 sampai 30), `M` (mode
+0 sampai 4) dan `F` (kipas 0 sampai 3). Launcher mengirim satu perintah per tekanan. Cloud yang menyusun
+kode IR penuh dari state yang diingatnya, lalu hub yang menembakkannya.
 
-```bash
-uv run --with tinytuya tools/ir-learn.py
-```
-
-Untuk tiap state, script minta remote diatur ke kondisinya, lalu menunggu 30 detik buat tekanan
-terakhir remote yang diarahkan ke hub. Tekanan terakhir itulah yang disimpan: tombol power untuk `On`
-dan `Off`, tombol suhu yang mendarat di angka yang diminta untuk yang lain. Arahkan remote menjauh dari
-hub saat mengatur, dan ke hub hanya untuk tekanan terakhir. Kode masuk ke `ac_codes.json` di sebelah
-`devices.json`, dengan urutan `STATES`.
-
-- State yang sudah ada dilewati, jadi script bisa dijalankan ulang dan hanya mengajari yang kurang.
-  Hapus labelnya dari `ac_codes.json` untuk mengajari ulang satu state.
-- Menambah atau mengganti state: ubah `STATES`, jalankan lagi. State yang tidak ada di `STATES`
-  dibuang dari file.
-- Urutan kartu di TV mengikuti urutan di file.
-
-### Batasan IR
-
-- **Preset, bukan kontrol.** Tidak ada tombol suhu naik/turun. Mau suhu atau kipas lain, ajari state
-  baru.
-- **Satu arah.** Hub tidak memberi tahu apakah AC menerima kodenya, dan AC tidak melaporkan statusnya.
-  Label "Last sent" hanya catatan launcher tentang kartu mana yang terakhir ditekan. Kalau AC diubah
-  dengan remote asli, label itu jadi salah.
+- **Satu arah.** AC dan hub tidak melaporkan state. Nilai yang tampil di kartu (power, suhu, mode, kipas)
+  adalah yang terakhir diterima cloud dari launcher, disimpan di TV. Kalau AC diubah dengan remote asli
+  atau dari Smart Life, kartunya jadi salah. Perintah yang ditolak cloud ditandai "Not sent".
+- **Perlu internet.** Tanpa koneksi ke cloud Tuya, kartu AC tidak bisa mengirim apa-apa. Purifier dan
+  fountain tetap jalan lokal.
 - **Garis pandang.** Hub harus bisa "melihat" AC.
+- **Sesi.** Token sesi berlaku sekitar dua jam; launcher memperbaruinya sendiri dan menyimpan token baru
+  di TV. Push ulang dari Mac memakai token TV selama login-nya sama; login baru dari Mac menggantinya.
 
 ### Cara kerja
 
-`Tuya.java` bicara protokol 3.3 (AES-ECB), 3.4 (session key, HMAC), dan 3.5 (session key, AES-GCM).
-Setiap panggilan membuka koneksi, menjalankan satu pertukaran, lalu menutupnya, jadi kegagalan tidak
-meninggalkan sambungan setengah jalan. `SmartHome.java` membaca `smart_home.json` dan menanyakan
-state tiap device; device yang tidak menjawab tampil "Not reachable".
+`Tuya.java` bicara protokol lokal 3.3 (AES-ECB), 3.4 (session key, HMAC), dan 3.5 (session key,
+AES-GCM). Setiap panggilan membuka koneksi, menjalankan satu pertukaran, lalu menutupnya, jadi kegagalan
+tidak meninggalkan sambungan setengah jalan. `TuyaCloud.java` dan `TuyaSign.java` menandatangani dan
+mengenkripsi request ke cloud seperti SDK `tuya_sharing`. `SmartHome.java` membaca `smart_home.json`
+dan menanyakan state tiap device lokal; device yang tidak menjawab tampil "Not reachable".
 
 Daftar dibaca ulang saat Home dibuka dan setelah tiap OK. Purifier melapor state barunya sesaat setelah
 patuh, jadi setelah menyalakan atau mematikan, launcher menunggu sampai device melapor state yang
@@ -672,13 +658,15 @@ diminta (maksimal sekitar 3 detik) sebelum menampilkannya.
 IP diambil dari `devices.json`. Kalau DHCP memberi IP baru, kartunya jadi "Not reachable" sampai
 `tools/smart-home.sh` dijalankan lagi; lebih mudah kasih IP tetap di router.
 
-### Sudah dicek di TV (24 Oktober 2026)
+### Sudah dicek
 
-- Purifier (3.5): tiga kali OK berturut-turut menyala, mati, menyala, dan statusnya mengikuti.
-- Fountain (3.3): OK menyala/mati dan balik lagi.
-- AC: kelima kartu terkirim dan "Last sent" pindah ke kartu yang ditekan. Efek ke AC hanya dikonfirmasi
-  untuk `On` (AC menyala).
-- Protokol 3.4 belum diuji, tidak ada device 3.4.
+- Purifier (3.5) dari TV: tiga kali OK berturut-turut menyala, mati, menyala, dan statusnya mengikuti
+  (24 Oktober 2026).
+- Fountain (3.3) dari TV: OK menyala/mati dan balik lagi (24 Oktober 2026).
+- Signing dan enkripsi cloud: cocok dengan lima vektor test SDK resmi, di Python dan di Java. Membaca
+  daftar device dan status dari cloud berhasil dari Mac.
+- Belum dicek dari TV: kartu AC lewat cloud, refresh token di Java, dan tampilan kartu device yang
+  baru (ikon, pill status, detail). Protokol 3.4 belum diuji, tidak ada device 3.4.
 
 ## Menutup ADB
 
