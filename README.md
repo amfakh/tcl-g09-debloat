@@ -300,3 +300,9 @@ Port 5555 is plaintext. This TV has `ro.adb.secure=1`, so other devices still ne
 screen. When you are done: Developer options → turn off USB debugging → "Revoke USB debugging
 authorizations" → reboot. From the Mac, `nc -vz <tv-ip> 5555` should say "Connection refused". Keep ADB
 on while the launcher is still being changed: `tools/build-install.sh` uses it.
+
+## License
+
+[MIT](LICENSE). `debloat.txt` and the safety checks in `tools/debloat.sh` are derived from
+[cleanyourtv](https://github.com/Gathin23/cleanyourtv), also MIT licensed; copyright for those parts
+stays with the cleanyourtv contributors.
