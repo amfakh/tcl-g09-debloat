@@ -163,7 +163,7 @@ MagicPath prototype: [Google TV Home + Plex](https://designs.magicpath.ai/v1/mig
 tools/build-install.sh   # build, install, grant permissions, switch on the Home redirect, check Home
 ```
 
-The script installs the APK, grants `READ_TV_LISTINGS`, adds `HomeRedirectService` to the accessibility
+The script installs the APK, grants `READ_TV_LISTINGS` and usage access, adds `HomeRedirectService` to the accessibility
 services (keeping the ones already on), then opens Settings and presses Home. If TCL Home is not what shows,
 the redirect is switched off again and the script fails, so the TV is never left without a Home.
 `tools/restore.sh` switches the redirect off and Google TV is Home again.
@@ -201,7 +201,8 @@ in the app's private storage on the TV.
   description, while the broadcast keeps playing (sound included) behind it; live TV is muted while another
   app plays audio.
 - **Rows:** Your apps and Continue watching on top, then Recommendations from Plex, YouTube, Recently
-  added, Spotify and Movies in your library, ordered by the app used most recently. Only the first rows show
+  added, Spotify and Movies in your library, ordered by the app used most recently, however it was opened
+  (the system's usage stats). Only the first rows show
   until focus moves down.
 - **Apps tab:** a 6-column grid of Favorites and all apps A–Z. Hold OK on a tile for Move, Add to or Remove
   from favorites, App info and Uninstall.

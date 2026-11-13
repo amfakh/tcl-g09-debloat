@@ -20,6 +20,7 @@ echo "built: $APK ($(wc -c < "$APK" | tr -d ' ') bytes)"
 tv_connect
 adb -s "$TV" install -r "$APK" >/dev/null
 tv pm grant "$PKG" android.permission.READ_TV_LISTINGS
+tv appops set "$PKG" GET_USAGE_STATS allow
 
 # Keep every accessibility service already on (tvQuickActions); a reinstall can drop ours from the list.
 ENABLED="$(tv settings get secure enabled_accessibility_services)"

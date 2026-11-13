@@ -9,6 +9,8 @@
 
     <!-- Channel list for the live TV behind Home; granted by tools/build-install.sh. -->
     <uses-permission android:name="android.permission.READ_TV_LISTINGS" />
+    <!-- When each app was last used, for the order of the rows; granted by tools/build-install.sh. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
     <!-- Card artwork: apps publish https image URLs in the TV provider. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Uninstall from a held app tile; the system still asks for confirmation. -->

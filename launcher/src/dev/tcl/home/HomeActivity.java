@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
 import android.app.AlertDialog;
+import android.app.usage.UsageStats;
+import android.app.usage.UsageStatsManager;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
@@ -508,8 +510,6 @@ public class HomeActivity extends Activity {
             art.setTag(null);
             art.setAlpha(0f);
         }
-    }
-
         for (View rebuilt : new View[] {rowsTop, rowsBottom, appRow, appsGrid}) {
             dropImages(rebuilt);
         }
@@ -529,6 +529,8 @@ public class HomeActivity extends Activity {
                 dropImages(group.getChildAt(i));
             }
         }
+    }
+
     /**
      * Stops live TV in the hero and gives the tuner back. Opening Live TV calls it first, so Live TV
      * never waits for Home to be hidden to get the tuner.
@@ -1505,8 +1507,9 @@ public class HomeActivity extends Activity {
     }
 
     /**
-     * When each app was last used: opened from Home (noteUsed) or, for what was watched elsewhere, the
-     * latest watch time in Continue watching, whichever is later.
+     * When each app was last used, the latest of: the system's usage stats (however the app was opened,
+     * once tools/build-install.sh has granted usage access), opened from Home (noteUsed), and the latest
+     * watch time in Continue watching.
      *
      * @param continueItems the Continue watching items
      * @return epoch ms by package
@@ -1515,6 +1518,12 @@ public class HomeActivity extends Activity {
         Map<String, Long> used = new HashMap<>();
         for (Map.Entry<String, ?> e : getSharedPreferences("used", MODE_PRIVATE).getAll().entrySet()) {
             used.put(e.getKey(), (Long) e.getValue());
+        }
+        long now = System.currentTimeMillis();
+        // Empty without usage access.
+        for (UsageStats s : getSystemService(UsageStatsManager.class)
+                .queryAndAggregateUsageStats(now - 30L * 24 * 3600_000, now).values()) {
+            used.merge(s.getPackageName(), s.getLastTimeUsed(), Math::max);
         }
         for (TvRows.Item item : continueItems) {
             if (item.packageName != null) {
