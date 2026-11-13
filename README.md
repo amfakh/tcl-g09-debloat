@@ -469,6 +469,14 @@ Service tidak memfilter tombol, karena filter tombol di keluarga G09 membuat vol
 Plex adalah app React Native, dan tombolnya baru terlihat oleh service dengan
 `flagIncludeNotImportantViews`.
 
+Service ini jalan di proses sendiri (`dev.tcl.home:redirect`, sekitar 5 MB). Service aksesibilitas
+yang ter-bind membuat prosesnya selalu dianggap visible, jadi kalau satu proses dengan Home, sistem
+tidak pernah bisa mengambil memori Home (sekitar 180 MB) selama app lain tampil. Dengan proses
+terpisah, Home bisa di-kill waktu app lain butuh memori, lalu dibuka ulang dari awal saat tombol Home
+ditekan (sekitar 2,5 detik). Perintah dari Home ke service (tile Google TV, autoplay Plex, quick
+settings) dikirim lewat `startService`, dan channel terakhir Live TV disimpan di file
+`live_tv_last`, bukan SharedPreferences, karena SharedPreferences di-cache per proses.
+
 Jangan `am force-stop dev.tcl.home`: service redirect ikut mati dan tidak tersambung lagi, jadi Home
 Google TV yang tampil. Jalankan `tools/build-install.sh` lagi untuk menyambungkannya.
 

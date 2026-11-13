@@ -1,11 +1,15 @@
 package dev.tcl.home;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.media.tv.TvContract;
 import android.media.tv.TvView;
+import android.util.AtomicFile;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,15 +17,14 @@ import java.util.List;
  * Plays the antenna tuner in a TvView behind Home, continuing with the channel last watched, here or in
  * Live TV. TCL's own "last played" setting does not follow Live TV and Live TV's own record is private,
  * so this keeps one record by channel number: written on every tune here, and by HomeRedirectService
- * from Live TV's channel banner.
+ * from Live TV's channel banner. The service runs in its own process, so the record is a file read
+ * fresh on every start: SharedPreferences would keep each process's own cached copy.
  */
 final class LiveTv {
-    private static final String PREFS = "live_tv";
-    private static final String KEY_LAST = "last_number";
+    private static final String LAST_FILE = "live_tv_last";
 
     private final TvView view;
     private final String inputId;
-    private final SharedPreferences prefs;
     private final Context context;
     private final List<Long> ids = new ArrayList<>();
     private final List<String> numbers = new ArrayList<>();
@@ -45,7 +48,6 @@ final class LiveTv {
         this.context = context;
         this.view = view;
         this.inputId = inputId;
-        this.prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
     /**
@@ -60,7 +62,7 @@ final class LiveTv {
         if (ids.isEmpty()) {
             return false;
         }
-        index = Math.max(0, numbers.indexOf(prefs.getString(KEY_LAST, "")));
+        index = Math.max(0, numbers.indexOf(last(context)));
         tune();
         return true;
     }
@@ -136,9 +138,30 @@ final class LiveTv {
      * @param number the channel's display number, such as "21"
      */
     static void remember(Context context, String number) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        if (!number.equals(prefs.getString(KEY_LAST, null))) {
-            prefs.edit().putString(KEY_LAST, number).apply();
+        if (number.equals(last(context))) {
+            return;
+        }
+        AtomicFile file = new AtomicFile(new File(context.getFilesDir(), LAST_FILE));
+        FileOutputStream out = null;
+        try {
+            out = file.startWrite();
+            out.write(number.getBytes(StandardCharsets.UTF_8));
+            file.finishWrite(out);
+        } catch (IOException e) {
+            file.failWrite(out);
+        }
+    }
+
+    /**
+     * @param context any context of this app
+     * @return the display number of the channel last watched, or an empty string when none is recorded
+     */
+    private static String last(Context context) {
+        try {
+            return new String(new AtomicFile(new File(context.getFilesDir(), LAST_FILE)).readFully(),
+                StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return "";
         }
     }
 

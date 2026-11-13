@@ -51,9 +51,12 @@
             android:exported="true"
             android:excludeFromRecents="true" />
 
-        <!-- Opens TCL Home whenever Google TV's home screen shows; enabled by tools/build-install.sh. -->
+        <!-- Opens TCL Home whenever Google TV's home screen shows; enabled by tools/build-install.sh.
+             Its own process: a bound accessibility service keeps its process at visible priority, which
+             would otherwise pin all of Home's memory while another app is on screen. -->
         <service
             android:name=".HomeRedirectService"
+            android:process=":redirect"
             android:exported="true"
             android:label="@string/app_name"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">

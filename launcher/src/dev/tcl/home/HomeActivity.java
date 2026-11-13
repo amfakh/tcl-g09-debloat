@@ -396,7 +396,7 @@ public class HomeActivity extends Activity {
     protected void onResume() {
         super.onResume();
         resumed = true;
-        HomeRedirectService.cancelPlexPlay();
+        HomeRedirectService.cancelPlexPlay(this);
         tick.run();
         loadRows(true);
         loadSmartHome();
@@ -874,7 +874,7 @@ public class HomeActivity extends Activity {
         }
         if (event.getAction() == KeyEvent.ACTION_DOWN && code == KeyEvent.KEYCODE_DPAD_RIGHT
                 && event.getRepeatCount() == 0 && getCurrentFocus() == settingsButton) {
-            HomeRedirectService.openQuickSettings();
+            HomeRedirectService.openQuickSettings(this);
             return true;
         }
         if (event.getAction() == KeyEvent.ACTION_DOWN && tab == TAB_HOME) {
@@ -1753,7 +1753,7 @@ public class HomeActivity extends Activity {
             if (play != null && !play.equals(item.intentUri)) {
                 // The item's page first; the redirect service plays it once Plex has reached the server.
                 uri = play.substring(0, play.indexOf('?'));
-                HomeRedirectService.playWhenPlexReady(play);
+                HomeRedirectService.playWhenPlexReady(this, play);
             }
             if (uri != null) {
                 startActivity(Intent.parseUri(uri, Intent.URI_INTENT_SCHEME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
@@ -1921,7 +1921,7 @@ public class HomeActivity extends Activity {
         art.setColor(TEXT);
         LinearLayout cell = tileShell(STOCK_HOME, art, false, null, true);
         cell.setOnClickListener(v -> {
-            HomeRedirectService.allowStockHome();
+            HomeRedirectService.allowStockHome(this);
             start(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
                 .setComponent(new ComponentName(pkg, getString(R.string.stock_home_activity))));
         });
