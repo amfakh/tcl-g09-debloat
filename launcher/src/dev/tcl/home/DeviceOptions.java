@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.ToDoubleFunction;
 
 /**
@@ -58,9 +59,6 @@ final class DeviceOptions {
     private static final String[] AC_MODE_NAMES = {"Cool", "Heat", "Auto", "Fan", "Dry"};
     private static final String[] AC_FANS = {"0", "1", "2", "3"};
     private static final String[] AC_FAN_NAMES = {"Auto", "Low", "Mid", "High"};
-    /** How long the fountain's filter and clean counts last, in days, as the BARDI app counts them. */
-    private static final int FOUNTAIN_FILTER_DAYS = 30;
-    private static final int FOUNTAIN_CLEAN_DAYS = 7;
 
     private final HomeActivity host;
     private final SmartHome home;
@@ -162,16 +160,20 @@ final class DeviceOptions {
             content.addView(section("Child lock"));
             content.addView(toggle("Lock the buttons", v -> v.optBoolean("7"), on -> set("7", on)));
             content.addView(section("Filter"));
-            content.addView(meter("Filter left", v -> v.optInt("5") / 100.0, v -> v.optInt("5") + "%"));
+            content.addView(meter("Filter left", v -> v.optInt("5") / 100.0, v -> v.optInt("5") + "%",
+                v -> v.optInt("5") <= SmartHome.PURIFIER_FILTER_DUE_PERCENT, "replace soon"));
             content.addView(resetButton("Reset filter", "11"));
         } else if (kind.equals("fountain")) {
             content.addView(section("Filter"));
-            content.addView(meter("Filter left", v -> v.optInt("7") / (double) FOUNTAIN_FILTER_DAYS,
-                v -> v.optInt("7") + " of " + FOUNTAIN_FILTER_DAYS + " days"));
+            // Days left in 3, the filter's length in 7; the clean count's length is in 8.
+            content.addView(meter("Filter left", v -> v.optInt("3") / (double) v.optInt("7"),
+                v -> v.optInt("3") + " of " + v.optInt("7") + " days",
+                v -> v.optInt("3") <= SmartHome.FOUNTAIN_FILTER_DUE_DAYS, "replace soon"));
             content.addView(resetButton("Reset filter", "5"));
             content.addView(section("Clean"));
-            content.addView(meter("Clean in", v -> v.optInt("4") / (double) FOUNTAIN_CLEAN_DAYS,
-                v -> v.optInt("4") + " of " + FOUNTAIN_CLEAN_DAYS + " days"));
+            content.addView(meter("Clean in", v -> v.optInt("4") / (double) v.optInt("8"),
+                v -> v.optInt("4") + " of " + v.optInt("8") + " days",
+                v -> v.optInt("4") <= SmartHome.FOUNTAIN_CLEAN_DUE_DAYS, "clean soon"));
             content.addView(resetButton("Reset clean", "6"));
         } else {
             content.addView(section("Temperature"));
@@ -361,8 +363,12 @@ final class DeviceOptions {
         return b.view;
     }
 
-    /** What is left, as a bar and in words; amber when it is nearly used up. The bar grows to its new length. */
-    private View meter(String label, ToDoubleFunction<JSONObject> fraction, Function<JSONObject, String> text) {
+    /**
+     * What is left, as a bar and in words; amber with a note when it is due, at the same point as the top bar's due
+     * pill. The bar grows to its new length.
+     */
+    private View meter(String label, ToDoubleFunction<JSONObject> fraction, Function<JSONObject, String> text,
+            Predicate<JSONObject> due, String note) {
         LinearLayout box = host.column();
         box.setClipChildren(false);
         LinearLayout head = new LinearLayout(host);
@@ -389,8 +395,8 @@ final class DeviceOptions {
         fill.setScaleX(0);
         updaters.add(v -> {
             double f = Math.max(0, Math.min(1, fraction.applyAsDouble(v)));
-            boolean low = f <= 0.15;
-            value.setText(text.apply(v) + (low ? "  ·  replace soon" : ""));
+            boolean low = due.test(v);
+            value.setText(text.apply(v) + (low ? "  ·  " + note : ""));
             value.setTextColor(low ? AMBER : TEXT);
             fillBg.setColor(low ? AMBER : PALE);
             fill.animate().scaleX((float) Math.max(0.01, f)).setDuration(SLIDE_MS * 2)

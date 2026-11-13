@@ -39,10 +39,10 @@ final class SmartHome {
      * grey (that reads as off) and the two used most, Cool and Dry, are far apart.
      */
     private static final int[] AC_MODE_COLORS = {0xFF4285F4, 0xFFEA4335, 0xFFFBBC04, 0xFF34A853, 0xFFA142F4};
-    /** How long the fountain's filter lasts, in days, as the BARDI app counts it. */
-    private static final int FOUNTAIN_FILTER_DAYS = 30;
-    /** How often the fountain wants cleaning, in days. */
-    private static final int FOUNTAIN_CLEAN_DAYS = 7;
+    /** When a count shows as due: the fountain's filter and clean in days left, the purifier's filter in percent. */
+    static final int FOUNTAIN_FILTER_DUE_DAYS = 7;
+    static final int FOUNTAIN_CLEAN_DUE_DAYS = 2;
+    static final int PURIFIER_FILTER_DUE_PERCENT = 15;
     private static final String TAG = "SmartHome";
     private static final String PREF_CLOUD = "cloud";
     private static final int TUYA_PORT = 6668;
@@ -56,6 +56,8 @@ final class SmartHome {
     private final File file;
     private final SharedPreferences prefs;
     private List<Device> devices = new ArrayList<>();
+    /** The counts that were due at the last read, as short labels for the top bar. */
+    private List<String> due = new ArrayList<>();
     private TuyaCloud cloud;
     private String acId;
     private int acMinTemp = 16;
@@ -91,6 +93,7 @@ final class SmartHome {
         List<Device> read = new ArrayList<>();
         List<TvRows.Item> items = new ArrayList<>();
         List<TvRows.Item> sensors = new ArrayList<>();
+        List<String> low = new ArrayList<>();
         acId = null;
         if (file.exists()) {
             try {
@@ -128,6 +131,7 @@ final class SmartHome {
                         d.on = dps.getBoolean("1");
                         item.description = d.on ? STATE_ON : STATE_OFF;
                         detail(d, dps, item);
+                        remind(d, dps, low);
                     } catch (IOException | JSONException | RuntimeException e) {
                         Log.w(TAG, d.kind + " did not answer", e);
                         item.description = STATE_OFFLINE;
@@ -145,7 +149,15 @@ final class SmartHome {
             }
         }
         devices = read;
+        due = low;
         return items;
+    }
+
+    /**
+     * @return what is due at the last read, such as "Clean · 1d", in card order; empty for nothing
+     */
+    List<String> due() {
+        return due;
     }
 
     /**
@@ -424,10 +436,11 @@ final class SmartHome {
      */
     private static void detail(Device d, JSONObject dps, TvRows.Item item) {
         boolean purifier = d.kind.equals("purifier");
-        item.positionMs = purifier ? dps.optInt("5") : dps.optInt("7");
-        item.durationMs = purifier ? 100 : FOUNTAIN_FILTER_DAYS;
+        // The fountain keeps its filter's days left in 3 and the filter's length in 7, its clean count's length in 8.
+        item.positionMs = purifier ? dps.optInt("5") : dps.optInt("3");
+        item.durationMs = purifier ? 100 : dps.optInt("7");
         if (!purifier) {
-            item.progress2 = Math.max(0, Math.min(1, dps.optInt("4") / (float) FOUNTAIN_CLEAN_DAYS));
+            item.progress2 = Math.max(0, Math.min(1, dps.optInt("4") / (float) dps.optInt("8")));
         }
         if (!d.on) {
             return;
@@ -440,10 +453,31 @@ final class SmartHome {
             item.accent = pm25 <= 12 ? 0xFFD9EAD3 : pm25 <= 35 ? 0xFFFFF2CC : pm25 <= 55 ? 0xFFFCE5CD : 0xFFF4CCCC;
         } else {
             item.statIcons = new int[] {Icon.FILTER, Icon.SPARKLE};
-            item.statTexts = new String[] {dps.optInt("7") + " days", dps.optInt("4") + " days"};
+            item.statTexts = new String[] {dps.optInt("3") + " days", dps.optInt("4") + " days"};
             // Green while most of the filter is left, then yellow, then red when it is nearly used up.
             float left = item.progress();
             item.accent = left > 0.5f ? 0xFFD9EAD3 : left > 0.15f ? 0xFFFFF2CC : 0xFFF4CCCC;
+        }
+    }
+
+    /**
+     * Adds a label for each count of a device that is due: the fountain's filter and clean, the purifier's filter.
+     */
+    private static void remind(Device d, JSONObject dps, List<String> due) {
+        if (d.kind.equals("purifier")) {
+            int filter = dps.optInt("5");
+            if (filter <= PURIFIER_FILTER_DUE_PERCENT) {
+                due.add("Purifier · " + filter + "%");
+            }
+        } else {
+            int filter = dps.optInt("3");
+            if (filter <= FOUNTAIN_FILTER_DUE_DAYS) {
+                due.add("Filter · " + filter + "d");
+            }
+            int clean = dps.optInt("4");
+            if (clean <= FOUNTAIN_CLEAN_DUE_DAYS) {
+                due.add("Clean · " + clean + "d");
+            }
         }
     }
 }

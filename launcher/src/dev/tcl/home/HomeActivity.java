@@ -136,6 +136,8 @@ public class HomeActivity extends Activity {
     // The name shown under a focused tool button.
     private TextView tip;
     private View weatherLine;
+    /** Under the weather: a pill for each smart device count that is due, such as cleaning the fountain. */
+    private LinearLayout dueLine;
     private TextView rainText;
     private Weather weather;
     private long weatherTriedAt;
@@ -304,6 +306,13 @@ public class HomeActivity extends Activity {
         root.addView(overlay, new FrameLayout.LayoutParams(-1, -1));
         topBarView = topBar();
         overlay.addView(topBarView, new LinearLayout.LayoutParams(-1, -2));
+        // Under the weather, over the panes: a layer of its own, so the bar keeps its height and nothing moves.
+        dueLine = new LinearLayout(this);
+        dueLine.setGravity(Gravity.CENTER_VERTICAL);
+        FrameLayout.LayoutParams dueLp = new FrameLayout.LayoutParams(-2, px(32), Gravity.TOP | Gravity.END);
+        dueLp.rightMargin = px(96);
+        root.addView(dueLine, dueLp);
+        topBarView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> dueLine.setTranslationY(b + px(10)));
 
         // Home and Apps share the space under the top bar; the tabs switch between them.
         FrameLayout panes = new FrameLayout(this);
@@ -1237,9 +1246,11 @@ public class HomeActivity extends Activity {
     private void loadSmartHome() {
         smartHomeThread.execute(() -> {
             List<TvRows.Item> items = smartHome.read();
+            List<String> due = smartHome.due();
             handler.post(() -> {
                 smartItems = items;
                 showDevices();
+                showDue(due);
             });
         });
     }
@@ -2399,6 +2410,28 @@ public class HomeActivity extends Activity {
             : sky == Weather.FOG ? Icon.FOG : sky == Weather.RAIN ? Icon.RAIN : Icon.STORM);
         weatherIcon.setVisibility(View.VISIBLE);
         weatherText.setText(weather.tempC() + "°");
+    }
+
+    /**
+     * Shows a pill under the weather for each smart device count that is due, tinted like a card whose filter is
+     * nearly used up.
+     *
+     * @param due the labels, such as "Clean · 1d"
+     */
+    private void showDue(List<String> due) {
+        dueLine.removeAllViews();
+        for (String label : due) {
+            TextView pill = text(20, Color.rgb(23, 24, 27), true);
+            pill.setPadding(px(12), px(3), px(12), px(3));
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(0xFFF4CCCC);
+            bg.setCornerRadius(px(20));
+            pill.setBackground(bg);
+            pill.setText(label);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+            lp.leftMargin = px(8);
+            dueLine.addView(pill, lp);
+        }
     }
 
     /**

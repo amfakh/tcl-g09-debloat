@@ -250,7 +250,7 @@ directly, without Google Home.
 | Card | Path | OK | Hold OK |
 |---|---|---|---|
 | Air purifier (Tuya protocol 3.5) | Local | On / off | Mode (Silent, Auto, 1, 2), child lock, filter left and reset |
-| Water fountain (3.3) | Local | On / off | Filter left (of 30 days) and clean due (of 7 days), each with a reset |
+| Water fountain (3.3) | Local | On / off | Filter left and clean due, in days of the lengths the fountain keeps, each with a reset |
 | Air conditioner | Cloud | On / off | Temperature (− and +, or pick 16–30 from the number), mode, fan |
 | Smart IR hub (3.3) | Local | Nothing | Nothing (it only measures room temperature and humidity) |
 
@@ -258,6 +258,11 @@ On the cards: the purifier is coloured by PM2.5 and shows PM2.5 and filter left;
 by filter left and splits into filter and clean, each with its own bar; the air conditioner is coloured by
 mode (Cool blue, Dry purple, Heat red, Fan green, Auto yellow). Resets need OK twice. The options sheet
 always shows what the device reported after a change, except for the air conditioner, which reports nothing.
+
+Under the weather, Home shows a red pill for each count that is due: the fountain's filter at 7 days or
+less, its clean at 2 days or less, the purifier's filter at 15% or less. A pill stays until that count is
+reset; the counts are read whenever Home shows. The options sheet turns the same count amber at the same
+point ("replace soon" for a filter, "clean soon" for the clean).
 
 ### Setup
 
