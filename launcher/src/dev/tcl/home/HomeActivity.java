@@ -488,6 +488,27 @@ public class HomeActivity extends Activity {
     }
 
     /**
+     * Once Home is hidden, lets go of cached images and the hero artwork so the app on screen gets the
+     * memory. Back on Home, the rows rebuild and fetch their images again.
+     *
+     * @param level how much memory the system wants back
+     */
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level < TRIM_MEMORY_UI_HIDDEN) {
+            return;
+        }
+        images.clear();
+        for (ImageView art : new ImageView[] {heroArt, heroArtBack}) {
+            art.animate().cancel();
+            art.setImageDrawable(null);
+            art.setTag(null);
+            art.setAlpha(0f);
+        }
+    }
+
+    /**
      * Stops live TV in the hero and gives the tuner back. Opening Live TV calls it first, so Live TV
      * never waits for Home to be hidden to get the tuner.
      */

@@ -45,6 +45,9 @@ final class Images {
             return value.getByteCount();
         }
     };
+    // Hero images (wider than a card, about 1.8 MB each) stay out of the card cache, where every card focused
+    // would push one in and the cards out. Only the two the crossfade shows are kept.
+    private final LruCache<String, Bitmap> heroes = new LruCache<>(2);
 
     /**
      * @param context used to open content:// URIs
@@ -97,7 +100,8 @@ final class Images {
             return;
         }
         String key = width + "|" + uri;
-        Bitmap hit = cache.get(key);
+        LruCache<String, Bitmap> store = width > TARGET_WIDTH ? heroes : cache;
+        Bitmap hit = store.get(key);
         if (hit != null) {
             view.setImageBitmap(hit);
             Runnable shown = onShownFor.remove(view);
@@ -121,7 +125,7 @@ final class Images {
                 if (bmp == null) {
                     return;
                 }
-                cache.put(key, bmp);
+                store.put(key, bmp);
                 for (ImageView v : targets) {
                     if (uri.equals(v.getTag())) {
                         v.setImageBitmap(bmp);
@@ -136,6 +140,12 @@ final class Images {
                 }
             });
         });
+    }
+
+    /** Drops every cached image; images still shown in a view stay until that view lets go of them. */
+    void clear() {
+        cache.evictAll();
+        heroes.evictAll();
     }
 
     /**
