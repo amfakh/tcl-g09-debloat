@@ -68,7 +68,7 @@ public class HomeActivity extends Activity {
     private static final int ROW_PEEK = 44;
     private static final int TEXT = Color.rgb(241, 243, 244);
     private static final int MUTED = Color.rgb(168, 171, 177);
-    private static final int BG = Color.rgb(15, 16, 18);
+    static final int BG = Color.rgb(15, 16, 18);
     private static final int PLEX = Color.rgb(229, 160, 13);
     private static final int YOUTUBE = Color.rgb(255, 0, 51);
     private static final int GRID_COLUMNS = 6;
@@ -398,7 +398,8 @@ public class HomeActivity extends Activity {
     protected void onResume() {
         super.onResume();
         resumed = true;
-        HomeRedirectService.cancelPlexPlay(this);
+        // After the first frame: the redirect service's cover comes off once Home is on screen.
+        getWindow().getDecorView().post(() -> HomeRedirectService.homeShown(this));
         tick.run();
         loadRows(true);
         loadSmartHome();

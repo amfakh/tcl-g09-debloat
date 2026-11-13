@@ -3,8 +3,13 @@ package dev.tcl.home;
 import android.accessibilityservice.AccessibilityService;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.PixelFormat;
 import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
+import android.view.View;
+import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
@@ -39,7 +44,7 @@ public class HomeRedirectService extends AccessibilityService {
     // Commands from Home, which runs in another process: the service runs in its own (see the manifest).
     private static final String ACTION_ALLOW_STOCK_HOME = "dev.tcl.home.ALLOW_STOCK_HOME";
     private static final String ACTION_PLAY_WHEN_READY = "dev.tcl.home.PLAY_WHEN_READY";
-    private static final String ACTION_CANCEL_PLAY = "dev.tcl.home.CANCEL_PLAY";
+    private static final String ACTION_HOME_SHOWN = "dev.tcl.home.HOME_SHOWN";
     private static final String ACTION_QUICK_SETTINGS = "dev.tcl.home.QUICK_SETTINGS";
     private static final String EXTRA_LINK = "link";
     // The play link to send once Plex is ready, or null.
@@ -49,6 +54,14 @@ public class HomeRedirectService extends AccessibilityService {
     private long stockHomeUntil;
     // Covers the window changes of the stock home opening; after that a new one means Home was pressed.
     private static final long STOCK_HOME_MS = 3_000;
+    // The cover over Google TV's home comes off this long after Home reports its first frame, so that
+    // frame is on screen first; and at the latest after COVER_MAX_MS, should Home never report.
+    private static final long COVER_LINGER_MS = 120;
+    private static final long COVER_MAX_MS = 6_000;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Runnable uncover = this::uncover;
+    // A plain screen in Home's background color over Google TV's home while TCL Home opens, or null.
+    private View cover;
 
     /**
      * Lets Google TV's home open once, without being replaced by TCL Home.
@@ -70,12 +83,13 @@ public class HomeRedirectService extends AccessibilityService {
     }
 
     /**
-     * Drops a play link not sent yet, when Home is back on screen first.
+     * Tells the service Home has drawn: the cover comes off, and a play link not sent yet is dropped
+     * since Home is back on screen first.
      *
      * @param context any context of this app
      */
-    static void cancelPlexPlay(Context context) {
-        send(context, new Intent(ACTION_CANCEL_PLAY));
+    static void homeShown(Context context) {
+        send(context, new Intent(ACTION_HOME_SHOWN));
     }
 
     /**
@@ -116,8 +130,10 @@ public class HomeRedirectService extends AccessibilityService {
         } else if (ACTION_PLAY_WHEN_READY.equals(action)) {
             plexPlayLink = intent.getStringExtra(EXTRA_LINK);
             plexPlayUntil = SystemClock.uptimeMillis() + PLEX_WAIT_MS;
-        } else if (ACTION_CANCEL_PLAY.equals(action)) {
+        } else if (ACTION_HOME_SHOWN.equals(action)) {
             plexPlayLink = null;
+            main.removeCallbacks(uncover);
+            main.postDelayed(uncover, COVER_LINGER_MS);
         } else if (ACTION_QUICK_SETTINGS.equals(action)) {
             performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS);
         }
@@ -194,10 +210,33 @@ public class HomeRedirectService extends AccessibilityService {
         }
     }
 
-    /** Brings TCL Home to the front. */
+    /** Covers the screen, so Google TV's home does not show while TCL Home opens, and brings Home to the front. */
     private void openHome() {
+        if (cover == null) {
+            cover = new View(this);
+            cover.setBackgroundColor(HomeActivity.BG);
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                // Keys and focus stay with the window below.
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.OPAQUE);
+            getSystemService(WindowManager.class).addView(cover, lp);
+        }
+        main.removeCallbacks(uncover);
+        main.postDelayed(uncover, COVER_MAX_MS);
         startActivity(new Intent(this, HomeActivity.class)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION));
+    }
+
+    /** Takes the cover off the screen, if it is on. */
+    private void uncover() {
+        main.removeCallbacks(uncover);
+        if (cover != null) {
+            getSystemService(WindowManager.class).removeView(cover);
+            cover = null;
+        }
     }
 
     /** Nothing to stop: the service gives no spoken or haptic feedback. */
