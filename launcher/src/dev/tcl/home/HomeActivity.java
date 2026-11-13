@@ -488,8 +488,10 @@ public class HomeActivity extends Activity {
     }
 
     /**
-     * Once Home is hidden, lets go of cached images and the hero artwork so the app on screen gets the
-     * memory. Back on Home, the rows rebuild and fetch their images again.
+     * Once Home is hidden, lets go of cached images, the hero artwork and the pictures on the cards so
+     * the app on screen gets the memory. The cards themselves stay, so the last focused one is found
+     * again. Back on Home, onResume rebuilds the rows (and the apps, since onStop marked Home hidden),
+     * which fetches their images again.
      *
      * @param level how much memory the system wants back
      */
@@ -508,6 +510,25 @@ public class HomeActivity extends Activity {
         }
     }
 
+        for (View rebuilt : new View[] {rowsTop, rowsBottom, appRow, appsGrid}) {
+            dropImages(rebuilt);
+        }
+    }
+
+    /**
+     * Empties every ImageView under a view, keeping the views and their tags.
+     *
+     * @param view the view to walk
+     */
+    private static void dropImages(View view) {
+        if (view instanceof ImageView) {
+            ((ImageView) view).setImageDrawable(null);
+        } else if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                dropImages(group.getChildAt(i));
+            }
+        }
     /**
      * Stops live TV in the hero and gives the tuner back. Opening Live TV calls it first, so Live TV
      * never waits for Home to be hidden to get the tuner.
